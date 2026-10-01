@@ -24,6 +24,20 @@ describe("navigation", () => {
     expect(stepChange(c, 3, -1)).toBe(1);
     expect(stepChange(c, 1, -1)).toBe(1);
   });
+  it("merges overview marks that would overlap", () => {
+    const many: TextDiff = {
+      ...diff,
+      chunks: Array.from({ length: 4000 }, (_, i) => ({
+        kind: i % 2 ? "replace" : "equal",
+        left: span(i, i + 1),
+        right: span(i, i + 1),
+      })),
+    };
+    const marks = overviewMarks(many);
+    expect(marks.length).toBeLessThanOrEqual(500);
+    expect(marks[0].chunk).toBe(1);
+  });
+
   it("places overview marks on aligned rows", () => {
     expect(overviewMarks(diff)).toEqual([
       { chunk: 1, kind: "insert", top: 2 / 8, height: 2 / 8 },

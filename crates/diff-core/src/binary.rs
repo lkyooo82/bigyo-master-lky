@@ -88,6 +88,7 @@ pub fn diff_bytes(left: &[u8], right: &[u8], opts: &BinaryOptions) -> BinaryDiff
     } else {
         aligned_chunks(left, right, &mut out.chunks);
     }
+    limit_chunks(&mut out.chunks, MAX_CHUNKS);
 
     out.stats.left_len = left.len() as u64;
     out.stats.right_len = right.len() as u64;
@@ -102,6 +103,54 @@ pub fn diff_bytes(left: &[u8], right: &[u8], opts: &BinaryOptions) -> BinaryDiff
         out.stats.changes += 1;
     }
     out
+}
+
+/// Unrelated data produces a change every few bytes wherever bytes coincide by chance; past
+/// this many chunks the result is unreadable and too large to send to the UI.
+pub const MAX_CHUNKS: usize = 20_000;
+
+/// Absorbs short equal runs between changes into the surrounding change, raising the length
+/// threshold until at most `max` chunks remain. Equal runs at the very start or end are kept.
+fn limit_chunks(chunks: &mut Vec<ByteChunk>, max: usize) {
+    let mut threshold = 8u64;
+    while chunks.len() > max {
+        let mut merged: Vec<ByteChunk> = Vec::with_capacity(chunks.len() / 2);
+        let mut i = 0;
+        while i < chunks.len() {
+            let c = chunks[i].clone();
+            let absorb = |m: &mut Vec<ByteChunk>| match m.last_mut() {
+                Some(prev) if prev.kind != ChunkKind::Equal => {
+                    prev.left.end = c.left.end;
+                    prev.right.end = c.right.end;
+                    true
+                }
+                _ => false,
+            };
+            let short_gap = c.kind == ChunkKind::Equal
+                && c.left.end - c.left.start < threshold
+                && i + 1 < chunks.len();
+            let joined = if c.kind != ChunkKind::Equal || short_gap {
+                absorb(&mut merged)
+            } else {
+                false
+            };
+            if !joined {
+                merged.push(c);
+            }
+            i += 1;
+        }
+        for c in &mut merged {
+            if c.kind != ChunkKind::Equal {
+                c.kind = match (c.left.is_empty(), c.right.is_empty()) {
+                    (true, _) => ChunkKind::Insert,
+                    (_, true) => ChunkKind::Delete,
+                    _ => ChunkKind::Replace,
+                };
+            }
+        }
+        *chunks = merged;
+        threshold *= 8;
+    }
 }
 
 fn push(out: &mut Vec<ByteChunk>, kind: ChunkKind, left: Range<usize>, right: Range<usize>) {
@@ -343,6 +392,42 @@ mod tests {
         let d = diff_bytes(&left, &right, &BinaryOptions::default());
         assert_eq!(d.mode, BinaryMode::Aligned);
         assert_eq!(d.stats.changes, 1);
+    }
+
+    #[test]
+    fn unrelated_data_is_capped_to_readable_changes() {
+        // Same layout (zero headers every 64 bytes), unrelated payloads: chance matches everywhere.
+        let make = |seed: u32| {
+            let mut x = seed;
+            (0..3_000_000)
+                .map(|i| {
+                    x = x.wrapping_mul(1103515245).wrapping_add(12345);
+                    if i % 64 < 8 {
+                        0
+                    } else {
+                        (x >> 16) as u8
+                    }
+                })
+                .collect::<Vec<u8>>()
+        };
+        let (left, right) = (make(7), make(99));
+        for opts in [BinaryOptions::default(), ALIGNED] {
+            let d = diff_bytes(&left, &right, &opts);
+            assert!(d.chunks.len() <= MAX_CHUNKS, "{} chunks", d.chunks.len());
+            // Chunks still cover both inputs in order.
+            let (mut l, mut r) = (0, 0);
+            for c in &d.chunks {
+                assert_eq!((c.left.start, c.right.start), (l, r));
+                (l, r) = (c.left.end, c.right.end);
+            }
+            assert_eq!((l, r), (3_000_000, 3_000_000));
+        }
+    }
+
+    #[test]
+    fn limit_keeps_small_results_untouched() {
+        let d = diff_bytes(&[1, 2, 3, 4, 5], &[1, 9, 3, 9, 5], &ALIGNED);
+        assert_eq!(d.chunks.len(), 5);
     }
 
     #[test]
