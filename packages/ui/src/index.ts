@@ -1,4 +1,4 @@
-export { App, type AppProps } from "./App";
+export { App, type AppProps, type Launch } from "./App";
 export { FileCompare, type FileCompareProps } from "./FileCompare";
 export { FolderCompare, type FolderCompareProps } from "./FolderCompare";
 export { DiffEditor, type DiffEditorHandle } from "./DiffEditor";

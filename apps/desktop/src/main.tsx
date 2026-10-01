@@ -5,9 +5,12 @@ import { App } from "@bigyo/ui";
 import "@bigyo/ui/styles.css";
 import { desktopFiles } from "./files";
 import { desktopFolders } from "./folders";
+import { readLaunch } from "./launch";
+
+const launch = await readLaunch();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App engine={createTauriEngine()} files={desktopFiles} folders={desktopFolders} />
+    <App engine={createTauriEngine()} files={desktopFiles} folders={desktopFolders} launch={launch} />
   </StrictMode>,
 );
