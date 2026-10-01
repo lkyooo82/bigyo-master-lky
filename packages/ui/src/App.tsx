@@ -38,6 +38,7 @@ export function App({ engine, files }: AppProps) {
   const [binaryMode, setBinaryMode] = useState<BinaryMode>("smart");
   const [textDiff, setTextDiff] = useState<TextDiff | null>(null);
   const [hex, setHex] = useState<{ left: Uint8Array; right: Uint8Array; diff: BinaryDiff } | null>(null);
+  const [hexBusy, setHexBusy] = useState(false);
   const [textCurrent, setTextCurrent] = useState(-1);
   const [hexCurrent, setHexCurrent] = useState(-1);
   const [meta, setMeta] = useState<Record<Side, FileState>>({ left: untitled("왼쪽 (예시)"), right: untitled("오른쪽 (예시)") });
@@ -77,12 +78,16 @@ export function App({ engine, files }: AppProps) {
       if (m.bytes && (m.binary || !m.dirty)) return m.bytes;
       return new TextEncoder().encode(editor.current!.getText(side).replace(/\n/g, m.eol));
     };
+    setHexBusy(true);
     void run(async () => {
+      // Let "비교 중…" paint first: the WebAssembly engine runs on this thread.
+      await new Promise((r) => setTimeout(r, 30));
+      if (cancelled) return;
       const left = bytesOf("left");
       const right = bytesOf("right");
       const diff = await engine.diffBytes(left, right, { mode: binaryMode });
       if (!cancelled) setHex({ left, right, diff });
-    });
+    }).finally(() => !cancelled && setHexBusy(false));
     return () => {
       cancelled = true;
     };
@@ -111,7 +116,7 @@ export function App({ engine, files }: AppProps) {
 
   const load = (side: Side, file: OpenedFile | null) => {
     if (!file) return;
-    const binary = looksBinary(file.bytes);
+    const binary = looksBinary(file.bytes, file.name);
     const text = binary ? BINARY_PLACEHOLDER : decodeText(file.bytes);
     editor.current?.setText(side, text.replace(/\r\n/g, "\n"));
     setMeta((m) => ({
@@ -275,7 +280,7 @@ export function App({ engine, files }: AppProps) {
       </main>
 
       <footer className="bm-status">
-        {error ? <span className="bm-error">{error}</span> : <Summary view={view} textDiff={textDiff} hexDiff={hex?.diff ?? null} requested={binaryMode} />}
+        {error ? <span className="bm-error">{error}</span> : <Summary view={view} textDiff={textDiff} hexDiff={hexBusy ? null : (hex?.diff ?? null)} requested={binaryMode} />}
         <span className="bm-muted bm-right">파일을 왼쪽이나 오른쪽에 끌어다 놓아도 됩니다</span>
       </footer>
     </div>
