@@ -5,7 +5,7 @@ default-members = ["crates/diff-core", "crates/diff-wasm", "apps/desktop/src-tau
 
 [workspace.package]
 edition = "2021"
-version = "0.1.0"
+version = "0.2.0"
 
 [workspace.dependencies]
 diff-core = { path = "crates/diff-core" }
