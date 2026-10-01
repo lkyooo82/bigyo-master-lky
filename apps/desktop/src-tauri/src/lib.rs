@@ -1,4 +1,8 @@
+use std::path::PathBuf;
+
+use diff_core::folder::FsEntry;
 use diff_core::{BinaryDiff, BinaryOptions, DiffOptions, TextDiff};
+use tauri::async_runtime::spawn_blocking;
 use tauri::ipc::{InvokeBody, Request};
 
 /// Same contract as the WebAssembly `diffText`: offsets are UTF-16 code units.
@@ -31,12 +35,35 @@ async fn diff_bytes(request: Request<'_>) -> Result<BinaryDiff, String> {
     Ok(diff_core::diff_bytes(left, right, &opts))
 }
 
+/// Lists a folder recursively for folder compare, skipping names that match `exclude`.
+#[tauri::command]
+async fn scan_dir(path: PathBuf, exclude: Vec<String>) -> Result<Vec<FsEntry>, String> {
+    spawn_blocking(move || diff_core::folder::scan_dir(&path, &exclude))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
+}
+
+/// Compares two files byte by byte on disk, so folder compare never ships contents over IPC.
+#[tauri::command]
+async fn files_equal(left: PathBuf, right: PathBuf) -> Result<bool, String> {
+    spawn_blocking(move || diff_core::folder::files_equal(&left, &right))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .invoke_handler(tauri::generate_handler![diff_text, diff_bytes])
+        .invoke_handler(tauri::generate_handler![
+            diff_text,
+            diff_bytes,
+            scan_dir,
+            files_equal
+        ])
         .run(tauri::generate_context!())
         .expect("error while running Bigyo Master");
 }

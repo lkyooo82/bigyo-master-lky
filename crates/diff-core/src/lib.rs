@@ -6,6 +6,8 @@
 #![cfg_attr(test, allow(clippy::single_range_in_vec_init))]
 
 pub mod binary;
+#[cfg(feature = "fs")]
+pub mod folder;
 pub mod inline;
 pub mod lines;
 pub mod options;
