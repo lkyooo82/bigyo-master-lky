@@ -1,0 +1,13 @@
+[package]
+name = "diff-core"
+description = "Text diff engine for Bigyo Master"
+edition.workspace = true
+version.workspace = true
+
+[features]
+default = []
+serde = ["dep:serde"]
+
+[dependencies]
+imara-diff.workspace = true
+serde = { workspace = true, optional = true }

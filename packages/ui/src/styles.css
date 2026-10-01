@@ -1,0 +1,101 @@
+:root {
+  --bg: #ffffff;
+  --panel: #f4f5f7;
+  --border: #d9dce1;
+  --text: #1f2328;
+  --muted: #6b7280;
+  --accent: #2563eb;
+  --changed-line: #fff4d6;
+  --changed-inline: #f7d17a;
+  --inserted-line: #e3f6e8;
+  --inserted-inline: #9fe0b0;
+  --deleted-line: #fde7e7;
+  --deleted-inline: #f5a8a8;
+  --current: #2563eb;
+  --spacer: repeating-linear-gradient(135deg, transparent 0 6px, #e5e7eb 6px 7px);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1b1d22;
+    --panel: #23262c;
+    --border: #353941;
+    --text: #e6e8eb;
+    --muted: #9aa1ab;
+    --accent: #6ea1ff;
+    --changed-line: #3a3220;
+    --changed-inline: #7a6022;
+    --inserted-line: #1f3326;
+    --inserted-inline: #2f6b40;
+    --deleted-line: #3a2224;
+    --deleted-inline: #7f3237;
+    --current: #6ea1ff;
+    --spacer: repeating-linear-gradient(135deg, transparent 0 6px, #2c3037 6px 7px);
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.4 system-ui, -apple-system, "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+}
+
+.bm-app { display: grid; grid-template-rows: auto auto 1fr auto; height: 100%; }
+
+.bm-toolbar, .bm-filebar, .bm-status {
+  display: flex; align-items: center; gap: 16px; padding: 6px 10px;
+  background: var(--panel); border-bottom: 1px solid var(--border);
+}
+.bm-toolbar { flex-wrap: wrap; }
+.bm-brand { font-size: 14px; }
+.bm-group { display: flex; align-items: center; gap: 6px; }
+.bm-group label { display: flex; align-items: center; gap: 4px; }
+.bm-muted { color: var(--muted); }
+.bm-right { margin-left: auto; }
+.bm-error { color: #dc2626; }
+
+button, select {
+  font: inherit; color: var(--text); background: var(--bg);
+  border: 1px solid var(--border); border-radius: 5px; padding: 3px 9px; cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: 0.45; cursor: default; }
+
+.bm-filebar { display: grid; grid-template-columns: 1fr 1fr 14px; gap: 0; padding: 0; }
+.bm-file { display: flex; align-items: center; gap: 6px; padding: 5px 10px; min-width: 0; }
+.bm-file + .bm-file { border-left: 1px solid var(--border); }
+.bm-filename { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+
+.bm-main { display: grid; grid-template-columns: 1fr 14px; min-height: 0; }
+.bm-panes { display: grid; grid-template-columns: 1fr 1fr; min-height: 0; }
+.bm-pane { min-width: 0; min-height: 0; }
+.bm-pane + .bm-pane { border-left: 1px solid var(--border); }
+.bm-pane .cm-editor { height: 100%; background: var(--bg); color: var(--text); }
+.bm-pane .cm-editor.cm-focused { outline: none; }
+.bm-pane .cm-scroller { font-family: "JetBrains Mono", "D2Coding", Consolas, "SF Mono", Menlo, monospace; font-size: 13px; }
+.bm-pane .cm-gutters { background: var(--panel); border-right: 1px solid var(--border); color: var(--muted); }
+.bm-pane .cm-activeLine { background: transparent; box-shadow: inset 0 0 0 1px var(--border); }
+.bm-pane .cm-activeLineGutter { background: transparent; color: var(--text); }
+
+.bm-changed { background: var(--changed-line); }
+.bm-changed .bm-inline { background: var(--changed-inline); border-radius: 2px; }
+.bm-inserted { background: var(--inserted-line); }
+.bm-deleted { background: var(--deleted-line); }
+.bm-current { box-shadow: inset 3px 0 0 var(--current); }
+.bm-spacer { background: var(--spacer); }
+
+.bm-overview { position: relative; background: var(--panel); border-left: 1px solid var(--border); }
+.bm-mark { position: absolute; left: 2px; right: 2px; border-radius: 1px; cursor: pointer; }
+.bm-mark-replace { background: var(--changed-inline); }
+.bm-mark-insert { background: var(--inserted-inline); }
+.bm-mark-delete { background: var(--deleted-inline); }
+.bm-mark-current { outline: 2px solid var(--current); }
+
+.bm-status { border-bottom: 0; border-top: 1px solid var(--border); gap: 6px; }
+.bm-s-changed { color: #b7791f; }
+.bm-s-inserted { color: #15803d; }
+.bm-s-deleted { color: #b91c1c; }

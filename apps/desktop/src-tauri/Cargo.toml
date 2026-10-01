@@ -1,0 +1,19 @@
+[package]
+name = "bigyo-master-desktop"
+description = "Bigyo Master desktop app"
+edition.workspace = true
+version.workspace = true
+publish = false
+
+[lib]
+name = "bigyo_master_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+diff-core = { workspace = true, features = ["serde"] }
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"

@@ -1,0 +1,15 @@
+{
+  "name": "bigyo-master",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "build:wasm": "node scripts/build-wasm.mjs",
+    "dev:web": "pnpm build:wasm && pnpm --filter @bigyo/web dev",
+    "build:web": "pnpm build:wasm && pnpm --filter @bigyo/web build",
+    "dev:desktop": "pnpm --filter @bigyo/desktop tauri dev",
+    "build:desktop": "pnpm --filter @bigyo/desktop tauri build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test"
+  }
+}

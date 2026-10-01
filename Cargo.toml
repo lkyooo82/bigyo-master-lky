@@ -1,0 +1,20 @@
+[workspace]
+resolver = "2"
+members = ["crates/diff-core", "crates/diff-wasm", "apps/desktop/src-tauri"]
+default-members = ["crates/diff-core", "crates/diff-wasm", "apps/desktop/src-tauri"]
+
+[workspace.package]
+edition = "2021"
+version = "0.1.0"
+
+[workspace.dependencies]
+diff-core = { path = "crates/diff-core" }
+imara-diff = { version = "0.2", default-features = false }
+serde = { version = "1", features = ["derive"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+
+[profile.release.package.diff-wasm]
+opt-level = "s"
