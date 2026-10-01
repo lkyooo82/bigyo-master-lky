@@ -4,9 +4,10 @@ import { createTauriEngine } from "@bigyo/engine/tauri";
 import { App } from "@bigyo/ui";
 import "@bigyo/ui/styles.css";
 import { desktopFiles } from "./files";
+import { desktopFolders } from "./folders";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App engine={createTauriEngine()} files={desktopFiles} />
+    <App engine={createTauriEngine()} files={desktopFiles} folders={desktopFolders} />
   </StrictMode>,
 );

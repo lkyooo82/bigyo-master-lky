@@ -24,8 +24,8 @@ jobs:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt -p diff-core -p diff-wasm --check
-      - run: cargo clippy -p diff-core -p diff-wasm --all-targets -- -D warnings
-      - run: cargo test -p diff-core -p diff-wasm
+      - run: cargo clippy -p diff-core -p diff-wasm --all-targets --all-features -- -D warnings
+      - run: cargo test -p diff-core -p diff-wasm --all-features
 
   web:
     name: Web app
