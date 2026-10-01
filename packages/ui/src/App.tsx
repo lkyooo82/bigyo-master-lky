@@ -116,7 +116,7 @@ export function App({ engine, files }: AppProps) {
 
   const load = (side: Side, file: OpenedFile | null) => {
     if (!file) return;
-    const binary = looksBinary(file.bytes);
+    const binary = looksBinary(file.bytes, file.name);
     const text = binary ? BINARY_PLACEHOLDER : decodeText(file.bytes);
     editor.current?.setText(side, text.replace(/\r\n/g, "\n"));
     setMeta((m) => ({
