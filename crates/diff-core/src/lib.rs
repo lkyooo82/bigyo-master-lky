@@ -5,6 +5,7 @@
 
 #![cfg_attr(test, allow(clippy::single_range_in_vec_init))]
 
+pub mod binary;
 pub mod inline;
 pub mod lines;
 pub mod options;
@@ -13,6 +14,7 @@ use std::ops::Range;
 
 use imara_diff::{Diff, InternedInput};
 
+pub use binary::{diff_bytes, BinaryDiff, BinaryMode, BinaryOptions, ByteChunk};
 pub use inline::{inline_diff, InlineDiff};
 pub use lines::{split_lines, Line};
 pub use options::{Algorithm, DiffOptions, InlineMode, WhitespaceMode};

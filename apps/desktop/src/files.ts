@@ -1,5 +1,5 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { readDroppedFile, type FileHost } from "@bigyo/ui";
 
 const baseName = (path: string) => path.split(/[\\/]/).pop() ?? path;
@@ -9,7 +9,7 @@ export const desktopFiles: FileHost = {
   async open() {
     const path = await open({ multiple: false, directory: false });
     if (!path) return null;
-    return { name: baseName(path), text: await readTextFile(path), handle: path };
+    return { name: baseName(path), bytes: await readFile(path), handle: path };
   },
 
   async save({ name, text, handle }) {
