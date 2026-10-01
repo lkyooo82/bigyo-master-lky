@@ -20,3 +20,24 @@ describe("wasm engine", () => {
     expect(same.stats.changes).toBe(0);
   });
 });
+
+describe("wasm byte diff", () => {
+  const bytes = (s: string) => new TextEncoder().encode(s);
+
+  it("finds an insertion in smart mode", async () => {
+    const d = await engine.diffBytes(bytes("HEADER-payload"), bytes("HEADER-new-payload"));
+    expect(d.mode).toBe("smart");
+    expect(d.chunks.map((c) => c.kind)).toEqual(["equal", "insert", "equal"]);
+    expect(d.stats.inserted).toBe(4);
+  });
+
+  it("compares by offset in aligned mode", async () => {
+    const d = await engine.diffBytes(new Uint8Array([1, 2, 3]), new Uint8Array([1, 9, 3, 4]), { mode: "aligned" });
+    expect(d.chunks).toEqual([
+      { kind: "equal", left: { start: 0, end: 1 }, right: { start: 0, end: 1 } },
+      { kind: "replace", left: { start: 1, end: 2 }, right: { start: 1, end: 2 } },
+      { kind: "equal", left: { start: 2, end: 3 }, right: { start: 2, end: 3 } },
+      { kind: "insert", left: { start: 3, end: 3 }, right: { start: 3, end: 4 } },
+    ]);
+  });
+});

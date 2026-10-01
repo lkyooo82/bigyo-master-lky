@@ -29,14 +29,14 @@ export const browserFiles: FileHost = {
       try {
         const [handle] = await fsWindow.showOpenFilePicker();
         const file = await handle.getFile();
-        return { name: file.name, text: await file.text(), handle };
+        return { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()), handle };
       } catch (e) {
         if (isAbort(e)) return null;
         throw e;
       }
     }
     const file = await pickWithInput();
-    return file && { name: file.name, text: await file.text() };
+    return file && { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) };
   },
 
   async save({ name, text, handle }) {

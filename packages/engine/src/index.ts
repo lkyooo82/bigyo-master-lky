@@ -57,7 +57,38 @@ export interface TextDiff {
   stats: DiffStats;
 }
 
+/** `aligned` compares byte N with byte N; `smart` also finds inserted and deleted bytes. */
+export type BinaryMode = "aligned" | "smart";
+
+export interface BinaryOptions {
+  mode: BinaryMode;
+}
+
+/** A run of bytes with the same status; ranges are byte offsets. Chunks cover both inputs in order. */
+export interface ByteChunk {
+  kind: ChunkKind;
+  left: Span;
+  right: Span;
+}
+
+export interface BinaryStats {
+  leftLen: number;
+  rightLen: number;
+  changes: number;
+  changed: number;
+  inserted: number;
+  deleted: number;
+}
+
+export interface BinaryDiff {
+  chunks: ByteChunk[];
+  stats: BinaryStats;
+  /** The mode actually used: very large inputs fall back to `aligned`. */
+  mode: BinaryMode;
+}
+
 /** The diff engine: WebAssembly in the browser, native Rust in the desktop app. */
 export interface DiffEngine {
   diffText(left: string, right: string, options?: Partial<DiffOptions>): Promise<TextDiff>;
+  diffBytes(left: Uint8Array, right: Uint8Array, options?: Partial<BinaryOptions>): Promise<BinaryDiff>;
 }
