@@ -56,8 +56,11 @@ export const browserFiles: FileHost = {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
     a.download = name;
+    document.body.append(a);
     a.click();
-    URL.revokeObjectURL(a.href);
+    a.remove();
+    // Revoking right away can cancel the download or lose its name.
+    setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
     return { name };
   },
 

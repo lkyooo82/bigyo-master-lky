@@ -4,22 +4,28 @@ import type { Side } from "./decorations";
 import { FileCompare } from "./FileCompare";
 import type { FileHost, OpenedFile } from "./files";
 import { FolderCompare } from "./FolderCompare";
+import { MergeView, type MergeFiles } from "./MergeView";
 import type { FolderHost, FolderRef } from "./folderTree";
 
-type Mode = "file" | "folder";
+type Mode = "file" | "folder" | "merge";
 
 /** What to open at startup, e.g. two paths passed on the command line by a Git tool. */
-export type Launch = { mode: "file"; files: Record<Side, OpenedFile> } | { mode: "folder"; folders: Record<Side, FolderRef> };
+export type Launch =
+  | { mode: "file"; files: Record<Side, OpenedFile> }
+  | { mode: "folder"; folders: Record<Side, FolderRef> }
+  | { mode: "merge"; files: MergeFiles };
 
 export interface AppProps {
   engine: DiffEngine;
   files: FileHost;
   folders?: FolderHost;
   launch?: Launch;
+  /** Closes the app; offered after a merge a Git tool started. */
+  onDone?: () => void;
 }
 
 /** File compare and folder compare. Both stay mounted so switching keeps each one's state. */
-export function App({ engine, files, folders, launch }: AppProps) {
+export function App({ engine, files, folders, launch, onDone }: AppProps) {
   const [mode, setMode] = useState<Mode>(launch?.mode ?? "file");
   // Opening a pair from folder compare starts a fresh file compare.
   const [session, setSession] = useState<{ id: number; files?: Record<Side, OpenedFile> }>({
@@ -27,10 +33,13 @@ export function App({ engine, files, folders, launch }: AppProps) {
     files: launch?.mode === "file" ? launch.files : undefined,
   });
 
-  const modeSwitch = folders && (
+  const modeSwitch = (
     <div className="bm-tabs bm-modes" role="tablist" aria-label="비교 종류">
       <button role="tab" aria-selected={mode === "file"} onClick={() => setMode("file")}>파일</button>
-      <button role="tab" aria-selected={mode === "folder"} onClick={() => setMode("folder")}>폴더</button>
+      {folders && (
+        <button role="tab" aria-selected={mode === "folder"} onClick={() => setMode("folder")}>폴더</button>
+      )}
+      <button role="tab" aria-selected={mode === "merge"} onClick={() => setMode("merge")}>병합</button>
     </div>
   );
 
@@ -53,6 +62,16 @@ export function App({ engine, files, folders, launch }: AppProps) {
           />
         </div>
       )}
+      <div className="bm-mode" hidden={mode !== "merge"}>
+        <MergeView
+          engine={engine}
+          files={files}
+          initial={launch?.mode === "merge" ? launch.files : undefined}
+          modeSwitch={modeSwitch}
+          active={mode === "merge"}
+          onDone={launch?.mode === "merge" ? onDone : undefined}
+        />
+      </div>
     </>
   );
 }

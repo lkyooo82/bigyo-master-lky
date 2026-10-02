@@ -7,7 +7,7 @@
 
 ## 저장소 구조
 
-- `crates/diff-core`: Rust 비교 엔진 (텍스트, 바이트). `fs` 기능은 데스크톱 전용 폴더 읽기와 파일 내용 비교
+- `crates/diff-core`: Rust 비교 엔진 (텍스트, 바이트, 3-way 병합). `fs` 기능은 데스크톱 전용 폴더 읽기와 파일 내용 비교
 - `crates/diff-wasm`: 웹용 WebAssembly 바인딩
 - `packages/engine`, `packages/ui`: 엔진 연결과 공용 화면 (React + CodeMirror 6)
 - `apps/web`, `apps/desktop`: 웹 앱(Vite)과 데스크톱 앱(Tauri 2)

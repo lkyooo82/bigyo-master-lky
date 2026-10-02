@@ -5,7 +5,7 @@ import type { TextDiff } from "@bigyo/engine";
 export type Side = "left" | "right";
 
 /** Fills the space where the other side has lines this side doesn't, so both sides stay aligned. */
-class SpacerWidget extends WidgetType {
+export class SpacerWidget extends WidgetType {
   constructor(readonly lines: number, readonly lineHeight: number) {
     super();
   }

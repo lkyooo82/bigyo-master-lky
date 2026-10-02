@@ -10,6 +10,7 @@ pub mod binary;
 pub mod folder;
 pub mod inline;
 pub mod lines;
+pub mod merge;
 pub mod options;
 
 use std::ops::Range;
@@ -19,6 +20,7 @@ use imara_diff::{Diff, InternedInput};
 pub use binary::{diff_bytes, BinaryDiff, BinaryMode, BinaryOptions, ByteChunk};
 pub use inline::{inline_diff, InlineDiff};
 pub use lines::{split_lines, Line};
+pub use merge::{merge3, Merge3, MergeRegion, MergeStats, RegionKind};
 pub use options::{Algorithm, DiffOptions, InlineMode, WhitespaceMode};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use diff_core::folder::FsEntry;
-use diff_core::{BinaryDiff, BinaryOptions, DiffOptions, TextDiff};
+use diff_core::{BinaryDiff, BinaryOptions, DiffOptions, Merge3, TextDiff};
 use tauri::async_runtime::spawn_blocking;
 use tauri::ipc::{InvokeBody, Request};
 
@@ -12,6 +12,12 @@ fn diff_text(left: String, right: String, options: Option<DiffOptions>) -> TextD
     let mut diff = diff_core::diff_text(&left, &right, &opts);
     diff.convert_offsets_to_utf16(&left, &right);
     diff
+}
+
+/// Same contract as the WebAssembly `merge3`: ranges are line indices.
+#[tauri::command]
+fn merge3(base: String, left: String, right: String, options: Option<DiffOptions>) -> Merge3 {
+    diff_core::merge3(&base, &left, &right, &options.unwrap_or_default())
 }
 
 /// Takes both inputs as one raw body (left bytes then right bytes) to avoid JSON-encoding
@@ -92,7 +98,8 @@ pub fn run() {
             diff_bytes,
             scan_dir,
             files_equal,
-            launch_paths
+            launch_paths,
+            merge3
         ])
         .run(tauri::generate_context!())
         .expect("error while running Bigyo Master");

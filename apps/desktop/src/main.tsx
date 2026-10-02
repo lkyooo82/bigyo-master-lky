@@ -1,5 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { createTauriEngine } from "@bigyo/engine/tauri";
 import { App } from "@bigyo/ui";
 import "@bigyo/ui/styles.css";
@@ -11,6 +12,6 @@ const launch = await readLaunch();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App engine={createTauriEngine()} files={desktopFiles} folders={desktopFolders} launch={launch} />
+    <App engine={createTauriEngine()} files={desktopFiles} folders={desktopFolders} launch={launch} onDone={() => void getCurrentWindow().close()} />
   </StrictMode>,
 );
