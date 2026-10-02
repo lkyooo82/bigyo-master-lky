@@ -31,6 +31,17 @@ export interface FolderHost {
   read(folder: FolderRef, path: string): Promise<OpenedFile>;
   /** Whether the file at `path` has the same bytes on both sides. */
   sameContent(left: FolderRef, right: FolderRef, path: string): Promise<boolean>;
+  /** Whether `copy` and `remove` can change this folder. Hosts without them can't change any. */
+  canWrite?(folder: FolderRef): boolean;
+  /**
+   * Copies the file or folder at `path` from one folder to the same path in the other, creating
+   * parent folders and overwriting files; files only in the target folder are kept.
+   */
+  copy?(from: FolderRef, to: FolderRef, path: string): Promise<void>;
+  /** Deletes the file or folder at `path`. */
+  remove?(folder: FolderRef, path: string): Promise<void>;
+  /** True when `remove` moves to the system trash; otherwise deletion can't be undone. */
+  removesToTrash?: boolean;
 }
 
 /**
@@ -262,3 +273,68 @@ export function globMatch(pattern: string, name: string): boolean {
 export function parseExclude(text: string): string[] {
   return text.split(/[,;]/).map((s) => s.trim()).filter(Boolean);
 }
+
+/** One step of a sync: copy `path` from side `from` to the other side, or delete it from `side`. */
+export type SyncAction =
+  | { op: "copy"; from: "left" | "right"; path: string; kind: EntryKind; /** The target has this file already. */ replace?: boolean }
+  | { op: "remove"; side: "left" | "right"; path: string; kind: EntryKind };
+
+/**
+ * `toRight`/`toLeft`: make one side take the other's new and changed files. `both`: copy
+ * one-sided entries both ways and the newer of each differing pair.
+ */
+export type SyncDirection = "toRight" | "toLeft" | "both";
+
+export interface SyncPlan {
+  /** Deletions first, so a file can replace a folder of the same name. */
+  actions: SyncAction[];
+  /** Differing files left alone: not yet compared, unreadable, or (both ways) equally new. */
+  skipped: string[];
+}
+
+const other = (side: "left" | "right") => (side === "left" ? "right" : "left");
+
+/**
+ * What a sync would do. With `mirror`, entries only on the target side are deleted, so the
+ * target ends up the same as the source; otherwise they are kept.
+ */
+export function planSync(nodes: FolderNode[], direction: SyncDirection, mirror: boolean): SyncPlan {
+  const removes: SyncAction[] = [];
+  const copies: SyncAction[] = [];
+  const skipped: string[] = [];
+  const walk = (list: FolderNode[]) => {
+    for (const n of list) {
+      if (n.status === "same") continue;
+      if (n.status === "leftOnly" || n.status === "rightOnly") {
+        const side = n.status === "leftOnly" ? "left" : "right";
+        // A name that is a file on one side and a folder on the other: only a mirror may
+        // delete the target's entry to make room.
+        const clash = n.key.endsWith("#" + side);
+        if (direction === "both") {
+          if (clash) skipped.push(n.path);
+          else copies.push({ op: "copy", from: side, path: n.path, kind: n.kind });
+        } else {
+          const source = direction === "toRight" ? "left" : "right";
+          if (side === source) {
+            if (clash && !mirror) skipped.push(n.path);
+            else copies.push({ op: "copy", from: side, path: n.path, kind: n.kind });
+          } else if (mirror) removes.push({ op: "remove", side, path: n.path, kind: n.kind });
+        }
+        continue;
+      }
+      if (n.kind === "dir") {
+        walk(n.children);
+        continue;
+      }
+      // A file on both sides that differs, or isn't known to be the same yet.
+      const from = direction === "toRight" ? "left" : direction === "toLeft" ? "right" : n.newer;
+      if (n.status !== "different" || !from) skipped.push(n.path);
+      else copies.push({ op: "copy", from, path: n.path, kind: "file", replace: true });
+    }
+  };
+  walk(nodes);
+  return { actions: [...removes, ...copies], skipped: [...new Set(skipped)] };
+}
+
+/** The side a sync action changes. */
+export const targetOf = (a: SyncAction) => (a.op === "copy" ? other(a.from) : a.side);

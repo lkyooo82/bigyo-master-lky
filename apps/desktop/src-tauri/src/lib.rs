@@ -88,6 +88,24 @@ fn launch_paths() -> Result<Vec<LaunchPath>, String> {
         .collect()
 }
 
+/// Copies a file or folder (overwriting, keeping modified times). Returns the number of files copied.
+#[tauri::command]
+async fn copy_entry(src: PathBuf, dst: PathBuf) -> Result<u64, String> {
+    spawn_blocking(move || diff_core::folder::copy_entry(&src, &dst))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
+}
+
+/// Moves a file or folder to the system trash, so a deletion can be undone there.
+#[tauri::command]
+async fn trash_entry(path: PathBuf) -> Result<(), String> {
+    spawn_blocking(move || trash::delete(&path))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -99,7 +117,9 @@ pub fn run() {
             scan_dir,
             files_equal,
             launch_paths,
-            merge3
+            merge3,
+            copy_entry,
+            trash_entry
         ])
         .run(tauri::generate_context!())
         .expect("error while running Bigyo Master");

@@ -6,13 +6,18 @@ interface FileHandle {
   kind: "file";
   name: string;
   getFile(): Promise<File>;
+  createWritable(): Promise<{ write(data: Blob): Promise<void>; close(): Promise<void> }>;
 }
+type Create = { create?: boolean };
 interface DirHandle {
   kind: "directory";
   name: string;
   entries(): AsyncIterable<[string, FileHandle | DirHandle]>;
-  getDirectoryHandle(name: string): Promise<DirHandle>;
-  getFileHandle(name: string): Promise<FileHandle>;
+  getDirectoryHandle(name: string, options?: Create): Promise<DirHandle>;
+  getFileHandle(name: string, options?: Create): Promise<FileHandle>;
+  removeEntry(name: string, options?: { recursive?: boolean }): Promise<void>;
+  queryPermission?(options: { mode: "readwrite" }): Promise<PermissionState>;
+  requestPermission?(options: { mode: "readwrite" }): Promise<PermissionState>;
 }
 type Source = { kind: "fsa"; dir: DirHandle } | { kind: "files"; files: Map<string, File> };
 
@@ -81,6 +86,49 @@ async function fileAt(folder: FolderRef, path: string): Promise<{ file: File; ha
   for (const p of parts.slice(0, -1)) dir = await dir.getDirectoryHandle(p);
   const handle = await dir.getFileHandle(parts[parts.length - 1]);
   return { file: await handle.getFile(), handle };
+}
+
+async function dirAt(root: DirHandle, parts: string[], create = false): Promise<DirHandle> {
+  let dir = root;
+  for (const p of parts) dir = await dir.getDirectoryHandle(p, { create });
+  return dir;
+}
+
+/** A folder picked for reading has to be allowed for writing too; the browser asks once. */
+async function writable(folder: FolderRef): Promise<DirHandle> {
+  const src = folder.handle as Source;
+  if (src.kind !== "fsa") throw new Error("끌어다 놓거나 업로드한 폴더는 바꿀 수 없습니다. \"폴더 열기\"로 다시 여세요.");
+  const mode = { mode: "readwrite" } as const;
+  if ((await src.dir.queryPermission?.(mode)) !== "granted" && (await src.dir.requestPermission?.(mode)) === "denied") {
+    throw new Error(`"${folder.name}" 폴더에 쓰기를 허용하지 않았습니다.`);
+  }
+  return src.dir;
+}
+
+type Item = { path: string; file?: File };
+
+/** The file at `path`, or the folders and files inside the folder there, folders first. */
+async function itemsAt(folder: FolderRef, path: string): Promise<Item[]> {
+  const src = folder.handle as Source;
+  if (src.kind === "files") {
+    const file = src.files.get(path);
+    if (file) return [{ path, file }];
+    return [...src.files].filter(([p]) => p.startsWith(path + "/")).map(([p, f]) => ({ path: p, file: f }));
+  }
+  const parts = path.split("/");
+  const parent = await dirAt(src.dir, parts.slice(0, -1));
+  const name = parts[parts.length - 1];
+  let handle: FileHandle | DirHandle | undefined;
+  for await (const [n, h] of parent.entries()) if (n === name) handle = h;
+  if (!handle) throw new Error(`찾을 수 없습니다: ${path}`);
+  const out: Item[] = [];
+  const walk = async (h: FileHandle | DirHandle, at: string) => {
+    if (h.kind === "file") return void out.push({ path: at, file: await h.getFile() });
+    out.push({ path: at });
+    for await (const [n, child] of h.entries()) await walk(child, `${at}/${n}`);
+  };
+  await walk(handle, path);
+  return out;
 }
 
 const CHUNK = 4 * 1024 * 1024;
@@ -168,4 +216,31 @@ export const browserFolders: FolderHost = {
     const [a, b] = await Promise.all([fileAt(left, path), fileAt(right, path)]);
     return sameBytes(a.file, b.file);
   },
+
+  canWrite: (folder) => (folder.handle as Source).kind === "fsa",
+
+  async copy(from, to, path) {
+    const root = await writable(to);
+    // Browsers can't set a file's modified time, so copies get the current time.
+    for (const item of await itemsAt(from, path)) {
+      const parts = item.path.split("/");
+      if (!item.file) {
+        await dirAt(root, parts, true);
+        continue;
+      }
+      const dir = await dirAt(root, parts.slice(0, -1), true);
+      const out = await (await dir.getFileHandle(parts[parts.length - 1], { create: true })).createWritable();
+      await out.write(item.file);
+      await out.close();
+    }
+  },
+
+  async remove(folder, path) {
+    const root = await writable(folder);
+    const parts = path.split("/");
+    const dir = await dirAt(root, parts.slice(0, -1));
+    await dir.removeEntry(parts[parts.length - 1], { recursive: true });
+  },
+
+  removesToTrash: false,
 };

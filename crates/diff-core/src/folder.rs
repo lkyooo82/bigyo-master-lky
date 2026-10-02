@@ -90,6 +90,46 @@ pub fn files_equal(left: &Path, right: &Path) -> io::Result<bool> {
     }
 }
 
+/// Copies a file or a whole folder from `src` to `dst`, creating missing parent folders and
+/// overwriting files already there; files in `dst` that `src` lacks are kept. Modified times are
+/// copied too, so a size-and-time comparison sees the copies as equal. Symbolic links to folders
+/// are not followed, matching [`scan_dir`]. Returns the number of files copied.
+pub fn copy_entry(src: &Path, dst: &Path) -> io::Result<u64> {
+    let meta = src.symlink_metadata()?;
+    if meta.is_dir() && dst.starts_with(src) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "cannot copy a folder into itself",
+        ));
+    }
+    copy_inner(src, dst, &meta)
+}
+
+fn copy_inner(src: &Path, dst: &Path, meta: &fs::Metadata) -> io::Result<u64> {
+    if meta.is_dir() {
+        fs::create_dir_all(dst)?;
+        let mut copied = 0;
+        for item in fs::read_dir(src)? {
+            let item = item?;
+            let path = item.path();
+            copied += copy_inner(
+                &path,
+                &dst.join(item.file_name()),
+                &path.symlink_metadata()?,
+            )?;
+        }
+        return Ok(copied);
+    }
+    if let Some(parent) = dst.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::copy(src, dst)?;
+    if let Ok(time) = meta.modified() {
+        File::options().write(true).open(dst)?.set_modified(time)?;
+    }
+    Ok(1)
+}
+
 /// Fills `buf` unless the file ends first; returns the byte count.
 fn read_full(file: &mut File, buf: &mut [u8]) -> io::Result<usize> {
     let mut filled = 0;
@@ -176,6 +216,36 @@ mod tests {
         assert!(files_equal(&root.join("b.txt"), &root.join("same.txt")).unwrap());
         assert!(!files_equal(&root.join("b.txt"), &root.join("other.txt")).unwrap());
         assert!(!files_equal(&root.join("b.txt"), &root.join("a.log")).unwrap());
+    }
+
+    #[test]
+    fn copies_files_and_folders() {
+        let dir = tempfile::tempdir().unwrap();
+        let (src, dst) = (dir.path().join("src"), dir.path().join("dst"));
+        fs::create_dir_all(src.join("a/b")).unwrap();
+        fs::create_dir_all(dst.join("a")).unwrap();
+        fs::write(src.join("a/b/new.txt"), "new").unwrap();
+        fs::write(src.join("a/same.txt"), "from src").unwrap();
+        fs::write(dst.join("a/same.txt"), "old").unwrap();
+        fs::write(dst.join("a/keep.txt"), "keep").unwrap();
+
+        assert_eq!(copy_entry(&src.join("a"), &dst.join("a")).unwrap(), 2);
+        assert_eq!(fs::read_to_string(dst.join("a/b/new.txt")).unwrap(), "new");
+        assert_eq!(
+            fs::read_to_string(dst.join("a/same.txt")).unwrap(),
+            "from src"
+        );
+        assert_eq!(fs::read_to_string(dst.join("a/keep.txt")).unwrap(), "keep");
+        let time = |p: &Path| fs::metadata(p).unwrap().modified().unwrap();
+        assert_eq!(time(&src.join("a/same.txt")), time(&dst.join("a/same.txt")));
+
+        // A single file into a folder that doesn't exist yet.
+        assert_eq!(
+            copy_entry(&src.join("a/b/new.txt"), &dst.join("x/y/new.txt")).unwrap(),
+            1
+        );
+        assert!(files_equal(&src.join("a/b/new.txt"), &dst.join("x/y/new.txt")).unwrap());
+        assert!(copy_entry(&src, &src.join("a/inner")).is_err());
     }
 
     #[test]

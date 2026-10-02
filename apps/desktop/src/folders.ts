@@ -31,4 +31,16 @@ export const desktopFolders: FolderHost = {
       right: joinPath(rootOf(right.handle), path),
     });
   },
+
+  canWrite: () => true,
+
+  async copy(from, to, path) {
+    await invoke<number>("copy_entry", { src: joinPath(rootOf(from.handle), path), dst: joinPath(rootOf(to.handle), path) });
+  },
+
+  remove(folder, path) {
+    return invoke<void>("trash_entry", { path: joinPath(rootOf(folder.handle), path) });
+  },
+
+  removesToTrash: true,
 };
