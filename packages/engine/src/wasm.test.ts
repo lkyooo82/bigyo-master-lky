@@ -9,7 +9,7 @@ describe("wasm engine", () => {
   it("returns chunks, pairs and stats", async () => {
     const d = await engine.diffText("a\nb\nc", "a\nB\nc");
     expect(d.chunks.map((c) => c.kind)).toEqual(["equal", "replace", "equal"]);
-    expect(d.chunks[1]).toEqual({ kind: "replace", left: { start: 1, end: 2 }, right: { start: 1, end: 2 } });
+    expect(d.chunks[1]).toEqual({ kind: "replace", left: { start: 1, end: 2 }, right: { start: 1, end: 2 }, unimportant: false });
     expect(d.stats.modified).toBe(1);
   });
 
@@ -18,6 +18,17 @@ describe("wasm engine", () => {
     expect(d.pairs[0].leftRanges).toEqual([{ start: 3, end: 4 }]);
     const same = await engine.diffText("A  b", "a b", { ignoreCase: true, whitespace: "collapse" });
     expect(same.stats.changes).toBe(0);
+  });
+
+  it("applies ignore rules and reports bad patterns", async () => {
+    const d = await engine.diffText("a // x\n// note\nb", "a // y\nb", { ignore: ["//.*", "("] });
+    expect(d.chunks.map((c) => [c.kind, c.unimportant])).toEqual([
+      ["equal", false],
+      ["delete", true],
+      ["equal", false],
+    ]);
+    expect(d.stats).toMatchObject({ changes: 0, unimportant: 1 });
+    expect(d.invalidPatterns.map((p) => p.pattern)).toEqual(["("]);
   });
 });
 

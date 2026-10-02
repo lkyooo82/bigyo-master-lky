@@ -10,6 +10,13 @@ export interface DiffOptions {
   ignoreLineEndings: boolean;
   algorithm: Algorithm;
   inline: InlineMode;
+  /**
+   * Regular expressions for text that doesn't matter, such as comments. Matches are removed from
+   * each line before comparing; a change made only of lines left blank by that is unimportant.
+   */
+  ignore: string[];
+  /** Also treat changes that only add or remove blank lines as unimportant. */
+  ignoreBlankLines: boolean;
 }
 
 export const defaultOptions: DiffOptions = {
@@ -18,6 +25,8 @@ export const defaultOptions: DiffOptions = {
   ignoreLineEndings: true,
   algorithm: "histogram",
   inline: "word",
+  ignore: [],
+  ignoreBlankLines: false,
 };
 
 /** Half-open range `[start, end)`. */
@@ -33,6 +42,8 @@ export interface Chunk {
   kind: ChunkKind;
   left: Span;
   right: Span;
+  /** Only lines the ignore rules say don't matter; not counted in `DiffStats` except `unimportant`. */
+  unimportant: boolean;
 }
 
 export interface LinePair {
@@ -48,13 +59,18 @@ export interface DiffStats {
   inserted: number;
   deleted: number;
   modified: number;
+  /** Changes that matter. */
   changes: number;
+  /** Changes made only of ignored text. */
+  unimportant: number;
 }
 
 export interface TextDiff {
   chunks: Chunk[];
   pairs: LinePair[];
   stats: DiffStats;
+  /** Ignore patterns that aren't valid regular expressions; they were skipped. */
+  invalidPatterns: { pattern: string; message: string }[];
 }
 
 /** `aligned` compares byte N with byte N; `smart` also finds inserted and deleted bytes. */

@@ -5,11 +5,12 @@ default-members = ["crates/diff-core", "crates/diff-wasm", "apps/desktop/src-tau
 
 [workspace.package]
 edition = "2021"
-version = "0.6.0"
+version = "0.7.0"
 
 [workspace.dependencies]
 diff-core = { path = "crates/diff-core" }
 imara-diff = { version = "0.2", default-features = false }
+regex-lite = "0.1"
 serde = { version = "1", features = ["derive"] }
 
 [profile.release]

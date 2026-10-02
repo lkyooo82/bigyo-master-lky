@@ -12,6 +12,7 @@ fs = []
 
 [dependencies]
 imara-diff.workspace = true
+regex-lite.workspace = true
 serde = { workspace = true, optional = true }
 
 [dev-dependencies]

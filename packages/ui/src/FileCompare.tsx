@@ -3,6 +3,7 @@ import { defaultOptions, type BinaryDiff, type BinaryMode, type DiffEngine, type
 import { DiffEditor, type DiffEditorHandle } from "./DiffEditor";
 import type { Side } from "./decorations";
 import { decodeText, detectEol, looksBinary, type Eol, type FileHost, type OpenedFile } from "./files";
+import { IgnoreRules, loadIgnoreSettings } from "./IgnoreRules";
 import { HexView } from "./HexView";
 import { changeIndices, overviewMarks, stepChange } from "./navigation";
 import { sampleLeft, sampleRight } from "./sample";
@@ -40,7 +41,7 @@ export interface FileCompareProps {
 export function FileCompare({ engine, files, initial, modeSwitch, active = true }: FileCompareProps) {
   const editor = useRef<DiffEditorHandle>(null);
   const [view, setView] = useState<View>("text");
-  const [options, setOptions] = useState<DiffOptions>(defaultOptions);
+  const [options, setOptions] = useState<DiffOptions>(() => ({ ...defaultOptions, ...loadIgnoreSettings() }));
   const [binaryMode, setBinaryMode] = useState<BinaryMode>("smart");
   const [textDiff, setTextDiff] = useState<TextDiff | null>(null);
   const [hex, setHex] = useState<{ left: Uint8Array; right: Uint8Array; diff: BinaryDiff } | null>(null);
@@ -221,6 +222,12 @@ export function FileCompare({ engine, files, initial, modeSwitch, active = true 
                   <option value="none">줄만</option>
                 </select>
               </label>
+              <IgnoreRules
+                settings={{ ignore: options.ignore, ignoreBlankLines: options.ignoreBlankLines }}
+                onChange={(s) => setOptions((o) => ({ ...o, ...s }))}
+                invalid={textDiff?.invalidPatterns ?? []}
+                hidden={textDiff?.stats.unimportant ?? 0}
+              />
             </div>
           </>
         ) : (
@@ -310,12 +317,24 @@ interface SummaryProps {
 function Summary({ view, textDiff, hexDiff, requested }: SummaryProps) {
   if (view === "text") {
     if (!textDiff) return <>비교 중…</>;
-    if (textDiff.stats.changes === 0) return <>두 내용이 같습니다</>;
     const s = textDiff.stats;
+    const ignored = s.unimportant > 0 && <span className="bm-muted"> · 무시한 차이 {fmt(s.unimportant)}곳</span>;
+    const invalid = textDiff.invalidPatterns.length > 0 && <span className="bm-error"> · 쓸 수 없는 무시 규칙 {textDiff.invalidPatterns.length}개</span>;
+    if (s.changes === 0) {
+      return (
+        <>
+          {s.unimportant > 0 ? "무시 규칙 밖의 차이는 없습니다" : "두 내용이 같습니다"}
+          {ignored}
+          {invalid}
+        </>
+      );
+    }
     return (
       <>
         차이 {fmt(s.changes)}곳 · <span className="bm-s-changed">수정 {fmt(s.modified)}줄</span> ·{" "}
         <span className="bm-s-inserted">추가 {fmt(s.inserted)}줄</span> · <span className="bm-s-deleted">삭제 {fmt(s.deleted)}줄</span>
+        {ignored}
+        {invalid}
       </>
     );
   }

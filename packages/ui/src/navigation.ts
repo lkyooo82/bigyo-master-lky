@@ -2,7 +2,8 @@ import type { ChunkKind, Span } from "@bigyo/engine";
 
 /** The part of a text or byte diff that navigation needs. */
 export interface ChunkList {
-  chunks: { kind: ChunkKind; left: Span; right: Span }[];
+  /** `unimportant` chunks only hold ignored text; navigation skips them. */
+  chunks: { kind: ChunkKind; left: Span; right: Span; unimportant?: boolean }[];
 }
 type Chunk = ChunkList["chunks"][number];
 
@@ -10,7 +11,7 @@ type Chunk = ChunkList["chunks"][number];
 export function changeIndices(diff: ChunkList | null): number[] {
   if (!diff) return [];
   const out: number[] = [];
-  diff.chunks.forEach((c, i) => c.kind !== "equal" && out.push(i));
+  diff.chunks.forEach((c, i) => c.kind !== "equal" && !c.unimportant && out.push(i));
   return out;
 }
 
@@ -44,7 +45,7 @@ export function overviewMarks(diff: ChunkList | null): OverviewMark[] {
   const out: OverviewMark[] = [];
   diff.chunks.forEach((c, i) => {
     const h = Math.max(rows(c), 0);
-    if (c.kind !== "equal") {
+    if (c.kind !== "equal" && !c.unimportant) {
       const top = row / total;
       const last = out[out.length - 1];
       // Marks closer together than one bucket merge into the first one (it stays clickable).

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEven
 import type { Side } from "./decorations";
 import type { OpenedFile } from "./files";
 import { ActionDialog } from "./FolderActions";
+import { applyGitignore } from "./gitignore";
 import {
   allRows,
   ancestorsOf,
@@ -34,6 +35,15 @@ const OVERSCAN = 10;
 /** Files compared at once; each comparison reads both files. */
 const CONCURRENCY = 16;
 const DEFAULT_EXCLUDE = ".git, node_modules";
+const GITIGNORE_KEY = "bigyo.folderGitignore";
+
+const loadGitignore = () => {
+  try {
+    return localStorage.getItem(GITIGNORE_KEY) === "1";
+  } catch {
+    return false;
+  }
+};
 const SIDES = ["left", "right"] as const;
 const otherSide = (side: Side): Side => (side === "left" ? "right" : "left");
 const sideName = (side: Side) => (side === "left" ? "왼쪽" : "오른쪽");
@@ -79,6 +89,7 @@ export function FolderCompare({ host, onOpenFiles, modeSwitch, initialFolders, a
   const [excludeText, setExcludeText] = useState(DEFAULT_EXCLUDE);
   const [exclude, setExclude] = useState(() => parseExclude(DEFAULT_EXCLUDE));
   const [criteria, setCriteria] = useState<Criteria>("content");
+  const [gitignore, setGitignore] = useState(loadGitignore);
   const [filter, setFilter] = useState<Filter>("all");
   const [verdicts, setVerdicts] = useState<Verdicts>(() => new Map());
   const [progress, setProgress] = useState({ done: 0, total: 0 });
@@ -166,8 +177,8 @@ export function FolderCompare({ host, onOpenFiles, modeSwitch, initialFolders, a
     if (list) setEntries((e) => ({ ...e, [side]: list }));
     setScanning((s) => ({ ...s, [side]: busy }));
   };
-  useScan(host, folders.left, exclude, rescan, scanSide("left"), report);
-  useScan(host, folders.right, exclude, rescan, scanSide("right"), report);
+  useScan(host, folders.left, exclude, gitignore, rescan, scanSide("left"), report);
+  useScan(host, folders.right, exclude, gitignore, rescan, scanSide("right"), report);
 
   // Coming back from the file view: files may have been saved there.
   const wasActive = useRef(active);
@@ -355,6 +366,21 @@ export function FolderCompare({ host, onOpenFiles, modeSwitch, initialFolders, a
               placeholder="예: .git, *.log"
             />
           </label>
+          <label title="각 폴더 안의 .gitignore 파일이 무시하라고 한 파일과 폴더는 비교하지 않습니다.">
+            <input
+              type="checkbox"
+              checked={gitignore}
+              onChange={(e) => {
+                setGitignore(e.target.checked);
+                try {
+                  localStorage.setItem(GITIGNORE_KEY, e.target.checked ? "1" : "0");
+                } catch {
+                  // Not remembering the choice is fine.
+                }
+              }}
+            />
+            .gitignore 따르기
+          </label>
         </div>
         <div className="bm-group">
           <button onClick={() => setExpanded(new Set(folderKeys(shown)))} disabled={!rows.length}>모두 펼치기</button>
@@ -465,6 +491,7 @@ function useScan(
   host: FolderHost,
   folder: FolderRef | null,
   exclude: string[],
+  gitignore: boolean,
   rescan: number,
   update: (list: FolderEntry[] | null, busy: boolean) => void,
   report: (e: unknown) => void,
@@ -473,8 +500,10 @@ function useScan(
     if (!folder) return;
     let cancelled = false;
     update(null, true);
+    const text = (path: string) => host.read(folder, path).then((f) => new TextDecoder().decode(f.bytes));
     host
       .scan(folder, exclude)
+      .then((list) => (gitignore ? applyGitignore(list, text) : list))
       .then((list) => !cancelled && update(list, false))
       .catch((e) => {
         if (cancelled) return;
@@ -484,7 +513,7 @@ function useScan(
     return () => {
       cancelled = true;
     };
-  }, [host, folder, exclude, rescan]);
+  }, [host, folder, exclude, gitignore, rescan]);
 }
 
 interface FolderListProps {
