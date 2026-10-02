@@ -43,3 +43,62 @@ function average(items) {
 
 export { total, greet, average };
 `;
+
+const mergeBase = `// 3-way 병합 예시: 위쪽은 왼쪽(내 변경), 기준, 오른쪽(상대 변경)이고 아래가 결과입니다.
+function total(items) {
+  let sum = 0;
+  for (const item of items) {
+    sum += item.price * item.count;
+  }
+  return sum;
+}
+
+function greet(name) {
+  console.log("Hello, " + name);
+}
+
+export { total, greet };
+`;
+
+const mergeLeft = `// 3-way 병합 예시: 위쪽은 왼쪽(내 변경), 기준, 오른쪽(상대 변경)이고 아래가 결과입니다.
+function total(items, taxRate = 0) {
+  let sum = 0;
+  for (const item of items) {
+    sum += item.price * item.count;
+  }
+  return sum * (1 + taxRate);
+}
+
+function greet(name) {
+  console.log("안녕하세요, " + name);
+}
+
+export { total, greet };
+`;
+
+const mergeRight = `// 3-way 병합 예시: 위쪽은 왼쪽(내 변경), 기준, 오른쪽(상대 변경)이고 아래가 결과입니다.
+function total(items) {
+  let sum = 0;
+  for (const item of items) {
+    sum += item.price * item.count;
+  }
+  return sum;
+}
+
+function greet(name) {
+  console.log(\`Hello, \${name}!\`);
+}
+
+function average(items) {
+  return items.length ? total(items) / items.length : 0;
+}
+
+export { total, greet, average };
+`;
+
+/** Inputs for the merge view before any files are opened: two automatic merges and a conflict. */
+export const mergeSample = {
+  base: { name: "기준 (예시)", text: mergeBase, eol: "\n" as const },
+  left: { name: "왼쪽 (예시)", text: mergeLeft, eol: "\n" as const },
+  right: { name: "오른쪽 (예시)", text: mergeRight, eol: "\n" as const },
+};

@@ -40,4 +40,12 @@ describe("wasm byte diff", () => {
       { kind: "insert", left: { start: 3, end: 3 }, right: { start: 3, end: 4 } },
     ]);
   });
+
+  it("merges three texts", async () => {
+    const m = await engine.merge3("a\nb\nc", "A\nb\nc", "a\nb\nC");
+    expect(m.regions.map((r) => r.kind)).toEqual(["left", "unchanged", "right"]);
+    expect(m.regions[0]).toEqual({ kind: "left", base: { start: 0, end: 1 }, left: { start: 0, end: 1 }, right: { start: 0, end: 1 } });
+    expect(m.stats).toEqual({ leftChanges: 1, rightChanges: 1, bothChanges: 0, conflicts: 0 });
+    expect((await engine.merge3("a", "b", "c")).stats.conflicts).toBe(1);
+  });
 });

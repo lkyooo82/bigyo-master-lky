@@ -87,8 +87,35 @@ export interface BinaryDiff {
   mode: BinaryMode;
 }
 
+/**
+ * How a run of lines merges. `left`/`right`: only that side changed them. `both`: both made
+ * the same change. `conflict`: both changed them differently.
+ */
+export type RegionKind = "unchanged" | "left" | "right" | "both" | "conflict";
+
+/** Line ranges (0-based) in each text; regions cover all three texts in order. */
+export interface MergeRegion {
+  kind: RegionKind;
+  base: Span;
+  left: Span;
+  right: Span;
+}
+
+export interface MergeStats {
+  leftChanges: number;
+  rightChanges: number;
+  bothChanges: number;
+  conflicts: number;
+}
+
+export interface Merge3 {
+  regions: MergeRegion[];
+  stats: MergeStats;
+}
+
 /** The diff engine: WebAssembly in the browser, native Rust in the desktop app. */
 export interface DiffEngine {
   diffText(left: string, right: string, options?: Partial<DiffOptions>): Promise<TextDiff>;
   diffBytes(left: Uint8Array, right: Uint8Array, options?: Partial<BinaryOptions>): Promise<BinaryDiff>;
+  merge3(base: string, left: string, right: string, options?: Partial<DiffOptions>): Promise<Merge3>;
 }

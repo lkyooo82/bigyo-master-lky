@@ -1,11 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { BinaryDiff, BinaryOptions, DiffEngine, DiffOptions, TextDiff } from "./index";
+import type { BinaryDiff, BinaryOptions, DiffEngine, DiffOptions, Merge3, TextDiff } from "./index";
 
 /** Runs the native Rust engine through Tauri commands. */
 export function createTauriEngine(): DiffEngine {
   return {
     diffText(left: string, right: string, options?: Partial<DiffOptions>) {
       return invoke<TextDiff>("diff_text", { left, right, options: options ?? null });
+    },
+    merge3(base: string, left: string, right: string, options?: Partial<DiffOptions>) {
+      return invoke<Merge3>("merge3", { base, left, right, options: options ?? null });
     },
     diffBytes(left: Uint8Array, right: Uint8Array, options?: Partial<BinaryOptions>) {
       // One raw body instead of JSON arrays: large files stay fast.

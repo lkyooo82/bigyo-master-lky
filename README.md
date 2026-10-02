@@ -29,14 +29,22 @@ Beyond Compare를 넘어서는 것을 목표로 하는 파일·폴더 비교/병
 - 데스크톱은 폴더 읽기와 내용 비교를 Rust에서 직접 하고, 웹은 브라우저 안에서 합니다 (파일이 밖으로 나가지 않음)
 - 아직 없는 것: 폴더 간 파일 복사·삭제와 동기화 (MVP 2의 다음 작업)
 
+## 3-way 병합
+
+- 위쪽 **병합** 전환에서 왼쪽(내 변경), 기준(공통 조상), 오른쪽(상대 변경)을 열면 자동으로 병합합니다. 한쪽만 바꾼 곳과 양쪽이 똑같이 바꾼 곳은 자동으로 반영합니다.
+- 양쪽이 다르게 바꾼 곳은 결과 창에 Git과 같은 충돌 표시(`<<<<<<<`, `|||||||`, `=======`, `>>>>>>>`)로 넣고 빨간색으로 보여 줍니다.
+- 충돌마다 **왼쪽 사용**(Alt+←), **오른쪽 사용**(Alt+→), **왼쪽+오른쪽**, **오른쪽+왼쪽**, **기준 사용**을 고를 수 있고, 다음·이전 충돌로 이동합니다(Alt+↓/↑).
+- 위쪽 세 창은 줄이 맞춰져 함께 스크롤되고, 결과 창은 직접 고칠 수 있습니다. 충돌이 남은 채로 저장하려 하면 한 번 더 묻습니다.
+- SourceTree나 `git mergetool`의 병합 도구로 쓸 수 있습니다 ([docs/sourcetree.md](docs/sourcetree.md)).
+
 ## SourceTree·Git 연동
 
-`bigyo-master <왼쪽> <오른쪽>`처럼 두 파일이나 두 폴더를 주고 실행하면 바로 비교합니다. SourceTree의 외부 비교 도구나 `git difftool`로 등록하는 방법은 [docs/sourcetree.md](docs/sourcetree.md)에 있습니다.
+`bigyo-master <왼쪽> <오른쪽>`처럼 두 파일이나 두 폴더를 주고 실행하면 바로 비교하고, `bigyo-master <왼쪽> <오른쪽> <기준> <결과>`로 실행하면 3-way 병합을 열어 결과 파일에 저장합니다. SourceTree의 외부 비교 도구나 `git difftool`로 등록하는 방법은 [docs/sourcetree.md](docs/sourcetree.md)에 있습니다.
 
 ## 구조
 
 ```
-crates/diff-core      Rust 비교 엔진 (줄 diff, 줄 안 diff, 바이트 diff, 폴더 읽기)
+crates/diff-core      Rust 비교 엔진 (줄 diff, 줄 안 diff, 바이트 diff, 3-way 병합, 폴더 읽기)
 crates/diff-wasm      diff-core를 브라우저용 WebAssembly로 노출
 packages/engine       TS 타입과 엔진 연결 (웹 = WASM, 데스크톱 = Tauri 명령)
 packages/ui           React + CodeMirror 6 비교 화면과 폴더 비교 (웹과 데스크톱 공용)
@@ -63,4 +71,4 @@ pnpm build:desktop    # 설치 파일 (target/release/bundle)
 
 ## 다음 단계
 
-계획은 [docs/plan.md](docs/plan.md)에 있습니다. 다음은 폴더 간 복사·동기화로 MVP 2를 마무리하고, 그다음 3-way 병합입니다.
+계획은 [docs/plan.md](docs/plan.md)에 있습니다. 남은 큰 작업은 폴더 간 복사·동기화입니다.
