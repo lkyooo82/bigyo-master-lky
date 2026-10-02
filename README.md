@@ -29,6 +29,10 @@ Beyond Compare를 넘어서는 것을 목표로 하는 파일·폴더 비교/병
 - 데스크톱은 폴더 읽기와 내용 비교를 Rust에서 직접 하고, 웹은 브라우저 안에서 합니다 (파일이 밖으로 나가지 않음)
 - 아직 없는 것: 폴더 간 파일 복사·삭제와 동기화 (MVP 2의 다음 작업)
 
+## SourceTree·Git 연동
+
+`bigyo-master <왼쪽> <오른쪽>`처럼 두 파일이나 두 폴더를 주고 실행하면 바로 비교합니다. SourceTree의 외부 비교 도구나 `git difftool`로 등록하는 방법은 [docs/sourcetree.md](docs/sourcetree.md)에 있습니다.
+
 ## 구조
 
 ```

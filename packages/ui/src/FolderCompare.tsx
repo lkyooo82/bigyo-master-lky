@@ -54,12 +54,14 @@ export interface FolderCompareProps {
   /** Opens a file pair in the file view; a side the file is missing from gets an empty file. */
   onOpenFiles(files: Record<Side, OpenedFile>): void;
   modeSwitch?: ReactNode;
+  /** Folders to compare right away. */
+  initialFolders?: Record<Side, FolderRef>;
   /** Keyboard shortcuts work only while this view is shown; showing it again rescans. */
   active?: boolean;
 }
 
-export function FolderCompare({ host, onOpenFiles, modeSwitch, active = true }: FolderCompareProps) {
-  const [folders, setFolders] = useState<Record<Side, FolderRef | null>>({ left: null, right: null });
+export function FolderCompare({ host, onOpenFiles, modeSwitch, initialFolders, active = true }: FolderCompareProps) {
+  const [folders, setFolders] = useState<Record<Side, FolderRef | null>>(initialFolders ?? { left: null, right: null });
   const [entries, setEntries] = useState<Record<Side, FolderEntry[] | null>>({ left: null, right: null });
   const [scanning, setScanning] = useState<Record<Side, boolean>>({ left: false, right: false });
   const [excludeText, setExcludeText] = useState(DEFAULT_EXCLUDE);

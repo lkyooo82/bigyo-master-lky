@@ -53,6 +53,35 @@ async fn files_equal(left: PathBuf, right: PathBuf) -> Result<bool, String> {
         .map_err(|e| e.to_string())
 }
 
+/// A path given on the command line, made absolute.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LaunchPath {
+    path: PathBuf,
+    exists: bool,
+    is_dir: bool,
+}
+
+/// The paths the app was started with, e.g. `bigyo-master left.txt right.txt` from a Git tool's
+/// external diff setting. Options (`-x`, such as macOS's `-psn_…`) are ignored. A missing path
+/// is reported rather than rejected: Git tools pass one for a file that was added or deleted.
+#[tauri::command]
+fn launch_paths() -> Result<Vec<LaunchPath>, String> {
+    std::env::args_os()
+        .skip(1)
+        .filter(|a| !a.to_string_lossy().starts_with('-'))
+        .map(|a| {
+            let path = std::path::absolute(&a).map_err(|e| e.to_string())?;
+            let meta = std::fs::metadata(&path).ok();
+            Ok(LaunchPath {
+                exists: meta.is_some(),
+                is_dir: meta.is_some_and(|m| m.is_dir()),
+                path,
+            })
+        })
+        .collect()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -62,7 +91,8 @@ pub fn run() {
             diff_text,
             diff_bytes,
             scan_dir,
-            files_equal
+            files_equal,
+            launch_paths
         ])
         .run(tauri::generate_context!())
         .expect("error while running Bigyo Master");
