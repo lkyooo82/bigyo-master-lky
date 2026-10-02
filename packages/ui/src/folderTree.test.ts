@@ -8,6 +8,7 @@ import {
   globMatch,
   parseExclude,
   pendingFiles,
+  planSync,
   signature,
   stepDifference,
   visibleRows,
@@ -119,5 +120,33 @@ describe("exclude patterns", () => {
 
   it("splits the exclude box", () => {
     expect(parseExclude(" .git, node_modules;*.tmp ,")).toEqual([".git", "node_modules", "*.tmp"]);
+  });
+});
+
+describe("planSync", () => {
+  // a.txt: left newer and bigger. b.txt: right newer. c.txt: same size, not compared yet.
+  // lonly/ and ronly.txt on one side; "x" a file on the left and a folder on the right.
+  const left = [file("a.txt", 2, 9000), file("b.txt", 1, 1000), file("c.txt", 4), dir("lonly", [file("in.txt", 1)]), file("same.txt", 0), file("x", 1)];
+  const right = [file("a.txt", 1, 1000), file("b.txt", 3, 9000), file("c.txt", 4), file("ronly.txt", 1), file("same.txt", 0), dir("x", [])];
+  const tree = compareTrees(left, right, "content", none);
+  const show = (p: ReturnType<typeof planSync>) =>
+    p.actions.map((a) => (a.op === "copy" ? `${a.from === "left" ? "→" : "←"} ${a.path}` : `✕${a.side === "left" ? "L" : "R"} ${a.path}`));
+
+  it("updates one side without deleting", () => {
+    const plan = planSync(tree, "toRight", false);
+    expect(show(plan)).toEqual(["→ lonly", "→ a.txt", "→ b.txt"]);
+    expect(plan.skipped).toEqual(["c.txt", "x"]);
+  });
+
+  it("mirrors, deleting first", () => {
+    const plan = planSync(tree, "toLeft", true);
+    expect(show(plan)).toEqual(["✕L lonly", "✕L x", "← x", "← a.txt", "← b.txt", "← ronly.txt"]);
+    expect(plan.skipped).toEqual(["c.txt"]);
+  });
+
+  it("syncs both ways by newer file", () => {
+    const plan = planSync(tree, "both", false);
+    expect(show(plan)).toEqual(["→ lonly", "→ a.txt", "← b.txt", "← ronly.txt"]);
+    expect(plan.skipped).toEqual(["x", "c.txt"]);
   });
 });

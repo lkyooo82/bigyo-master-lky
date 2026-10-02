@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import type { Side } from "./decorations";
 import type { OpenedFile } from "./files";
+import { ActionDialog } from "./FolderActions";
 import {
   allRows,
   ancestorsOf,
@@ -10,6 +11,7 @@ import {
   folderKeys,
   parseExclude,
   pendingFiles,
+  planSync,
   signature,
   stepDifference,
   visibleRows,
@@ -21,6 +23,8 @@ import {
   type FolderRef,
   type Row,
   type Status,
+  type SyncAction,
+  type SyncDirection,
   type Verdict,
   type Verdicts,
 } from "./folderTree";
@@ -31,6 +35,14 @@ const OVERSCAN = 10;
 const CONCURRENCY = 16;
 const DEFAULT_EXCLUDE = ".git, node_modules";
 const SIDES = ["left", "right"] as const;
+const otherSide = (side: Side): Side => (side === "left" ? "right" : "left");
+const sideName = (side: Side) => (side === "left" ? "왼쪽" : "오른쪽");
+
+/** An open copy, delete or sync dialog. */
+type Dialog =
+  | { kind: "copy"; from: Side; node: FolderNode }
+  | { kind: "remove"; node: FolderNode; sides: Side[] }
+  | { kind: "sync"; direction: SyncDirection; mirror: boolean };
 
 const STATUS_MARK: Record<Status, { mark: string; title: string }> = {
   same: { mark: "=", title: "같음" },
@@ -74,6 +86,9 @@ export function FolderCompare({ host, onOpenFiles, modeSwitch, initialFolders, a
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [rescan, setRescan] = useState(0);
+  const [dialog, setDialog] = useState<Dialog | null>(null);
+  const [running, setRunning] = useState<{ done: number; total: number } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const verdictsRef = useRef(verdicts);
   verdictsRef.current = verdicts;
 
@@ -87,6 +102,64 @@ export function FolderCompare({ host, onOpenFiles, modeSwitch, initialFolders, a
   const counts = useMemo(() => countFiles(tree), [tree]);
 
   const report = (e: unknown) => setError(e instanceof Error ? e.message : String(e));
+
+  const writable = (side: Side) => {
+    const folder = folders[side];
+    return !!(folder && host.copy && host.remove && host.canWrite?.(folder));
+  };
+  const selectedNode = rows.find((r) => r.node.key === selected)?.node ?? null;
+  const canCopy = (from: Side) => !!(comparing && selectedNode?.[from] && writable(otherSide(from)));
+  const canRemove = !!(selectedNode && SIDES.some((side) => selectedNode[side] && writable(side)));
+  const canSync = comparing && (writable("left") || writable("right"));
+
+  const openRemove = (node: FolderNode) => {
+    const sides = SIDES.filter((side) => node[side] && writable(side));
+    if (sides.length) setDialog({ kind: "remove", node, sides: sides.length === 1 ? sides : [] });
+  };
+
+  const plan = useMemo((): { actions: SyncAction[]; skipped: string[] } => {
+    if (!dialog) return { actions: [], skipped: [] };
+    if (dialog.kind === "sync") return planSync(tree, dialog.direction, dialog.mirror);
+    const { node } = dialog;
+    if (dialog.kind === "copy") {
+      return { actions: [{ op: "copy", from: dialog.from, path: node.path, kind: node.kind, replace: !!node[otherSide(dialog.from)] }], skipped: [] };
+    }
+    return { actions: dialog.sides.map((side) => ({ op: "remove", side, path: node.path, kind: node.kind })), skipped: [] };
+  }, [dialog, tree]);
+
+  /** The sides the plan changes that can't be changed, as a message. */
+  const blocked = (() => {
+    const locked = SIDES.filter((side) => plan.actions.some((a) => (a.op === "copy" ? otherSide(a.from) : a.side) === side) && !writable(side));
+    if (!locked.length) return null;
+    return `${locked.map(sideName).join("과 ")} 폴더는 바꿀 수 없습니다.` + (host.canWrite ? " 끌어다 놓거나 업로드한 폴더라면 \"폴더 열기\"로 다시 여세요." : "");
+  })();
+
+  const runPlan = async () => {
+    const { actions } = plan;
+    const [left, right] = [folders.left!, folders.right!];
+    const ref = (side: Side) => (side === "left" ? left : right);
+    const failed: string[] = [];
+    setRunning({ done: 0, total: actions.length });
+    for (let i = 0; i < actions.length; i++) {
+      const a = actions[i];
+      try {
+        if (a.op === "copy") await host.copy!(ref(a.from), ref(otherSide(a.from)), a.path);
+        else await host.remove!(ref(a.side), a.path);
+      } catch (e) {
+        failed.push(`${a.path}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+      setRunning({ done: i + 1, total: actions.length });
+    }
+    setRunning(null);
+    setDialog(null);
+    // A copy can keep the size and time the old verdict was keyed on, so compare those files again.
+    const touched = actions.map((a) => a.path);
+    setVerdicts((v) => new Map([...v].filter(([path]) => !touched.some((t) => path === t || path.startsWith(t + "/")))));
+    setRescan((n) => n + 1);
+    const ok = actions.length - failed.length;
+    setNotice(failed.length ? null : `${fmt(ok)}개 항목을 처리했습니다`);
+    setError(failed.length ? `${fmt(failed.length)}개 실패 (${fmt(ok)}개 완료). ${failed[0]}${failed.length > 1 ? " 외" : ""}` : null);
+  };
 
   // List each side whenever its folder or the exclude patterns change.
   const scanSide = (side: Side) => (list: FolderEntry[] | null, busy: boolean) => {
@@ -160,6 +233,7 @@ export function FolderCompare({ host, onOpenFiles, modeSwitch, initialFolders, a
     setEntries((e) => ({ ...e, [side]: null }));
     setVerdicts(new Map());
     setSelected(null);
+    setNotice(null);
   };
 
   const onDrop = (e: DragEvent<HTMLDivElement>) => {
@@ -209,8 +283,11 @@ export function FolderCompare({ host, onOpenFiles, modeSwitch, initialFolders, a
   useEffect(() => {
     if (!active) return;
     const onKey = (e: KeyboardEvent) => {
+      if (dialog) return;
       if (e.altKey && e.key === "ArrowDown") go(1);
       else if (e.altKey && e.key === "ArrowUp") go(-1);
+      else if (e.altKey && e.key === "ArrowRight" && canCopy("left")) setDialog({ kind: "copy", from: "left", node: selectedNode! });
+      else if (e.altKey && e.key === "ArrowLeft" && canCopy("right")) setDialog({ kind: "copy", from: "right", node: selectedNode! });
       else return;
       e.preventDefault();
     };
@@ -229,6 +306,7 @@ export function FolderCompare({ host, onOpenFiles, modeSwitch, initialFolders, a
       if (row.node.kind === "dir" && expanded.has(row.node.key)) toggle(row.node.key, false);
       else if (row.parent) setSelected(row.parent);
     } else if (e.key === "Enter" && row) openNode(row.node);
+    else if (e.key === "Delete" && row) openRemove(row.node);
     else return;
     e.preventDefault();
   };
@@ -285,6 +363,22 @@ export function FolderCompare({ host, onOpenFiles, modeSwitch, initialFolders, a
             새로 고침
           </button>
         </div>
+        {host.copy && (
+          <div className="bm-group">
+            <button onClick={() => setDialog({ kind: "copy", from: "left", node: selectedNode! })} disabled={!canCopy("left")} title="고른 항목을 오른쪽으로 복사 (Alt+→)">
+              → 복사
+            </button>
+            <button onClick={() => setDialog({ kind: "copy", from: "right", node: selectedNode! })} disabled={!canCopy("right")} title="고른 항목을 왼쪽으로 복사 (Alt+←)">
+              ← 복사
+            </button>
+            <button onClick={() => selectedNode && openRemove(selectedNode)} disabled={!canRemove} title={host.removesToTrash ? "고른 항목을 휴지통으로 (Delete)" : "고른 항목을 삭제 (Delete)"}>
+              삭제
+            </button>
+            <button onClick={() => setDialog({ kind: "sync", direction: "toRight", mirror: false })} disabled={!canSync || busy} title="두 폴더를 한 번에 맞춥니다">
+              동기화…
+            </button>
+          </div>
+        )}
       </header>
 
       <div className="bm-filebar">
@@ -321,11 +415,32 @@ export function FolderCompare({ host, onOpenFiles, modeSwitch, initialFolders, a
         />
       </main>
 
+      {dialog && (
+        <ActionDialog
+          title={dialog.kind === "sync" ? "폴더 동기화" : dialog.kind === "copy" ? "복사" : "삭제"}
+          actions={plan.actions}
+          skipped={plan.skipped}
+          trash={!!host.removesToTrash}
+          blocked={blocked}
+          running={running}
+          runLabel={dialog.kind === "sync" ? "동기화" : dialog.kind === "copy" ? "복사" : host.removesToTrash ? "휴지통으로" : "삭제"}
+          emptyText={dialog.kind === "remove" ? "지울 쪽을 고르세요." : undefined}
+          onRun={() => void runPlan()}
+          onCancel={() => setDialog(null)}
+        >
+          {dialog.kind === "sync" && <SyncOptions dialog={dialog} onChange={setDialog} />}
+          {dialog.kind === "remove" && dialog.sides.length !== 1 && (
+            <RemoveSides node={dialog.node} sides={dialog.sides} writable={writable} onChange={(sides) => setDialog({ ...dialog, sides })} />
+          )}
+        </ActionDialog>
+      )}
+
       <footer className="bm-status">
         {error ? (
           <span className="bm-error">{error}</span>
         ) : comparing ? (
           <>
+            {notice && <span className="bm-notice">{notice} · </span>}
             <span className="bm-fs-text-different">다른 파일 {fmt(counts.different)}개</span> ·{" "}
             <span className="bm-fs-text-only">왼쪽에만 {fmt(counts.leftOnly)}개</span> ·{" "}
             <span className="bm-fs-text-only">오른쪽에만 {fmt(counts.rightOnly)}개</span> · 같은 파일 {fmt(counts.same)}개
@@ -478,6 +593,51 @@ function EntryCells({ node, side, depth, open, onToggle }: EntryCellsProps) {
       </span>
       <span className="bm-fs-size">{dir ? "" : fmt(entry.size)}</span>
       <span className="bm-fs-time">{fmtTime(entry.modified)}</span>
+    </div>
+  );
+}
+
+function SyncOptions({ dialog, onChange }: { dialog: Extract<Dialog, { kind: "sync" }>; onChange(d: Dialog): void }) {
+  return (
+    <div className="bm-dialog-options">
+      <label>
+        방향
+        <select value={dialog.direction} onChange={(e) => onChange({ ...dialog, direction: e.target.value as SyncDirection })}>
+          <option value="toRight">왼쪽 → 오른쪽</option>
+          <option value="toLeft">오른쪽 → 왼쪽</option>
+          <option value="both">양쪽 (새것으로)</option>
+        </select>
+      </label>
+      {dialog.direction !== "both" && (
+        <label title="미러: 받는 쪽에만 있는 파일과 폴더를 지워서 두 폴더를 똑같이 만듭니다.">
+          <input type="checkbox" checked={dialog.mirror} onChange={(e) => onChange({ ...dialog, mirror: e.target.checked })} />
+          받는 쪽에만 있는 것은 삭제 (미러)
+        </label>
+      )}
+      <span className="bm-muted">
+        {dialog.direction === "both"
+          ? "한쪽에만 있는 것은 반대쪽으로, 양쪽이 다른 파일은 더 최근에 고친 쪽으로 복사합니다."
+          : `${dialog.direction === "toRight" ? "왼쪽" : "오른쪽"}에서 새로 생기거나 바뀐 파일을 ${dialog.direction === "toRight" ? "오른쪽" : "왼쪽"}으로 복사합니다.`}
+      </span>
+    </div>
+  );
+}
+
+function RemoveSides({ node, sides, writable, onChange }: { node: FolderNode; sides: Side[]; writable(side: Side): boolean; onChange(sides: Side[]): void }) {
+  return (
+    <div className="bm-dialog-options">
+      <span>지울 쪽</span>
+      {SIDES.filter((side) => node[side]).map((side) => (
+        <label key={side}>
+          <input
+            type="checkbox"
+            checked={sides.includes(side)}
+            disabled={!writable(side)}
+            onChange={(e) => onChange(e.target.checked ? SIDES.filter((s) => s === side || sides.includes(s)) : sides.filter((s) => s !== side))}
+          />
+          {sideName(side)}
+        </label>
+      ))}
     </div>
   );
 }
