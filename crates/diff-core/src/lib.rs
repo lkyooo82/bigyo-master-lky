@@ -19,7 +19,7 @@ use imara_diff::{Diff, InternedInput};
 
 pub use binary::{diff_bytes, BinaryDiff, BinaryMode, BinaryOptions, ByteChunk};
 pub use inline::{inline_diff, InlineDiff};
-pub use lines::{split_lines, Line};
+pub use lines::{split_lines, Keyer, Line, PatternError};
 pub use merge::{merge3, Merge3, MergeRegion, MergeStats, RegionKind};
 pub use options::{Algorithm, DiffOptions, InlineMode, WhitespaceMode};
 
@@ -45,6 +45,9 @@ pub struct Chunk {
     pub kind: ChunkKind,
     pub left: Range<u32>,
     pub right: Range<u32>,
+    /// A change made only of lines the ignore rules say don't matter. It isn't counted in
+    /// `stats` apart from `stats.unimportant`.
+    pub unimportant: bool,
 }
 
 /// Two lines inside a `Replace` chunk that correspond to each other, with the changed byte
@@ -71,8 +74,10 @@ pub struct DiffStats {
     pub deleted: u32,
     /// Paired lines that differ.
     pub modified: u32,
-    /// Number of non-equal chunks.
+    /// Number of non-equal chunks that matter.
     pub changes: u32,
+    /// Number of non-equal chunks the ignore rules say don't matter.
+    pub unimportant: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -82,6 +87,8 @@ pub struct TextDiff {
     pub chunks: Vec<Chunk>,
     pub pairs: Vec<LinePair>,
     pub stats: DiffStats,
+    /// Ignore patterns that couldn't be used.
+    pub invalid_patterns: Vec<PatternError>,
 }
 
 impl TextDiff {
@@ -120,9 +127,10 @@ pub fn diff_text(left: &str, right: &str, opts: &DiffOptions) -> TextDiff {
     let left_lines = split_lines(left);
     let right_lines = split_lines(right);
 
+    let (keyer, invalid_patterns) = Keyer::new(opts);
     let mut input: InternedInput<String> = InternedInput::default();
-    input.update_before(left_lines.iter().map(|l| lines::line_key(l, opts)));
-    input.update_after(right_lines.iter().map(|l| lines::line_key(l, opts)));
+    input.update_before(left_lines.iter().map(|l| keyer.key(l)));
+    input.update_after(right_lines.iter().map(|l| keyer.key(l)));
     let mut diff = Diff::compute(opts.algorithm.into(), &input);
     diff.postprocess_lines(&input);
 
@@ -132,8 +140,11 @@ pub fn diff_text(left: &str, right: &str, opts: &DiffOptions) -> TextDiff {
             right_lines: right_lines.len() as u32,
             ..Default::default()
         },
+        invalid_patterns,
         ..Default::default()
     };
+    let ignorable_l: Vec<bool> = left_lines.iter().map(|l| keyer.unimportant(l)).collect();
+    let ignorable_r: Vec<bool> = right_lines.iter().map(|l| keyer.unimportant(l)).collect();
     let (mut l, mut r) = (0u32, 0u32);
     for hunk in diff.hunks() {
         if hunk.before.start > l {
@@ -141,34 +152,68 @@ pub fn diff_text(left: &str, right: &str, opts: &DiffOptions) -> TextDiff {
                 kind: ChunkKind::Equal,
                 left: l..hunk.before.start,
                 right: r..hunk.after.start,
+                unimportant: false,
             });
         }
-        let kind = match (hunk.before.is_empty(), hunk.after.is_empty()) {
-            (true, _) => ChunkKind::Insert,
-            (_, true) => ChunkKind::Delete,
-            _ => ChunkKind::Replace,
+        // Split ignorable lines at either end of the change into changes of their own, so a
+        // comment next to a real edit doesn't make the whole block count.
+        let (before, after) = (hunk.before.clone(), hunk.after.clone());
+        let lead = |flags: &[bool], r: &Range<u32>| {
+            flags[r.start as usize..r.end as usize]
+                .iter()
+                .take_while(|&&f| f)
+                .count() as u32
         };
-        let mut paired = 0;
-        if kind == ChunkKind::Replace && opts.inline != InlineMode::None {
-            let found = pair_lines(
+        let trail = |flags: &[bool], r: &Range<u32>| {
+            flags[r.start as usize..r.end as usize]
+                .iter()
+                .rev()
+                .take_while(|&&f| f)
+                .count() as u32
+        };
+        let (ll, lr) = (lead(&ignorable_l, &before), lead(&ignorable_r, &after));
+        if ll == before.len() as u32 && lr == after.len() as u32 {
+            push_change(
+                &mut out,
                 &left_lines,
                 &right_lines,
-                hunk.before.clone(),
-                hunk.after.clone(),
+                before,
+                after,
+                true,
                 opts,
             );
-            paired = found.len() as u32;
-            out.pairs.extend(found);
+        } else {
+            let core_l = before.start + ll..before.end;
+            let core_r = after.start + lr..after.end;
+            let (tl, tr) = (trail(&ignorable_l, &core_l), trail(&ignorable_r, &core_r));
+            push_change(
+                &mut out,
+                &left_lines,
+                &right_lines,
+                before.start..core_l.start,
+                after.start..core_r.start,
+                true,
+                opts,
+            );
+            push_change(
+                &mut out,
+                &left_lines,
+                &right_lines,
+                core_l.start..core_l.end - tl,
+                core_r.start..core_r.end - tr,
+                false,
+                opts,
+            );
+            push_change(
+                &mut out,
+                &left_lines,
+                &right_lines,
+                core_l.end - tl..core_l.end,
+                core_r.end - tr..core_r.end,
+                true,
+                opts,
+            );
         }
-        out.stats.modified += paired;
-        out.stats.deleted += hunk.before.len() as u32 - paired;
-        out.stats.inserted += hunk.after.len() as u32 - paired;
-        out.stats.changes += 1;
-        out.chunks.push(Chunk {
-            kind,
-            left: hunk.before.clone(),
-            right: hunk.after.clone(),
-        });
         l = hunk.before.end;
         r = hunk.after.end;
     }
@@ -177,9 +222,48 @@ pub fn diff_text(left: &str, right: &str, opts: &DiffOptions) -> TextDiff {
             kind: ChunkKind::Equal,
             left: l..left_lines.len() as u32,
             right: r..right_lines.len() as u32,
+            unimportant: false,
         });
     }
     out
+}
+
+/// Adds a change chunk for `left`/`right` and counts it; does nothing when both are empty.
+fn push_change(
+    out: &mut TextDiff,
+    left_lines: &[Line<'_>],
+    right_lines: &[Line<'_>],
+    left: Range<u32>,
+    right: Range<u32>,
+    unimportant: bool,
+    opts: &DiffOptions,
+) {
+    let kind = match (left.is_empty(), right.is_empty()) {
+        (true, true) => return,
+        (true, _) => ChunkKind::Insert,
+        (_, true) => ChunkKind::Delete,
+        _ => ChunkKind::Replace,
+    };
+    if unimportant {
+        out.stats.unimportant += 1;
+    } else {
+        let mut paired = 0;
+        if kind == ChunkKind::Replace && opts.inline != InlineMode::None {
+            let found = pair_lines(left_lines, right_lines, left.clone(), right.clone(), opts);
+            paired = found.len() as u32;
+            out.pairs.extend(found);
+        }
+        out.stats.modified += paired;
+        out.stats.deleted += left.len() as u32 - paired;
+        out.stats.inserted += right.len() as u32 - paired;
+        out.stats.changes += 1;
+    }
+    out.chunks.push(Chunk {
+        kind,
+        left,
+        right,
+        unimportant,
+    });
 }
 
 /// Finds which left lines correspond to which right lines inside a replace chunk, keeping order.
@@ -302,7 +386,8 @@ mod tests {
                 inserted: 1,
                 deleted: 0,
                 modified: 1,
-                changes: 2
+                changes: 2,
+                unimportant: 0,
             }
         );
     }
@@ -352,5 +437,45 @@ mod tests {
         let right = left.replace("line 1000\n", "line one thousand\n");
         let d = diff_text(&left, &right, &DiffOptions::default());
         assert_eq!(d.stats.modified, 1);
+    }
+
+    #[test]
+    fn ignore_rules_hide_unimportant_changes() {
+        let left = "let a = 1; // first\n// old note\nlet b = 2;\nlet c = 3;";
+        let right = "let a = 1; // changed\nlet b = 2;\n\n# shell\nlet c = 4;";
+        let opts = DiffOptions {
+            ignore: vec!["//.*".into(), "#.*".into()],
+            whitespace: WhitespaceMode::Trim,
+            ..Default::default()
+        };
+        let d = diff_text(left, right, &opts);
+        let kinds: Vec<_> = d.chunks.iter().map(|c| (c.kind, c.unimportant)).collect();
+        // The trailing comment change is ignored entirely and the comment-only line deletion is
+        // unimportant. The blank line counts by default, so it keeps "# shell" inside the real
+        // change c = 3 -> 4.
+        assert_eq!(
+            kinds,
+            [
+                (ChunkKind::Equal, false),
+                (ChunkKind::Delete, true),
+                (ChunkKind::Equal, false),
+                (ChunkKind::Replace, false),
+            ]
+        );
+        assert_eq!((d.stats.changes, d.stats.unimportant), (1, 1));
+        assert!(d.invalid_patterns.is_empty());
+
+        let d = diff_text(
+            left,
+            right,
+            &DiffOptions {
+                ignore_blank_lines: true,
+                ..opts
+            },
+        );
+        // Ignoring blank lines too splits them and "# shell" off the front of the change.
+        assert_eq!((d.stats.changes, d.stats.unimportant), (1, 2));
+        assert_eq!(d.chunks[3].right, 2..4);
+        assert!(d.chunks[3].unimportant);
     }
 }

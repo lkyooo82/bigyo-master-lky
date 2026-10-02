@@ -2,7 +2,7 @@
 
 use std::ops::Range;
 
-use crate::lines::{line_key, split_lines};
+use crate::lines::{split_lines, Keyer};
 use crate::{diff_text, ChunkKind, DiffOptions, InlineMode};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -99,6 +99,7 @@ pub fn merge3(base: &str, left: &str, right: &str, opts: &DiffOptions) -> Merge3
     let base_len = split_lines(base).len() as u32;
     let (left_lines, right_lines) = (split_lines(left), split_lines(right));
     let (lh, rh) = (hunks(base, left, opts), hunks(base, right, opts));
+    let (keyer, _) = Keyer::new(opts);
 
     let mut out = Merge3::default();
     let (mut i, mut j) = (0, 0);
@@ -154,7 +155,7 @@ pub fn merge3(base: &str, left: &str, right: &str, opts: &DiffOptions) -> Merge3
                 let key = |lines: &[crate::Line<'_>], r: &Range<u32>| -> Vec<String> {
                     lines[r.start as usize..r.end as usize]
                         .iter()
-                        .map(|l| line_key(l, opts))
+                        .map(|l| keyer.key(l))
                         .collect()
                 };
                 if key(&left_lines, &left) == key(&right_lines, &right) {

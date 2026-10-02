@@ -27,6 +27,7 @@ const lineDeco = (cls: string) => Decoration.line({ class: cls });
 const changed = lineDeco("bm-line bm-changed");
 const inserted = lineDeco("bm-line bm-inserted");
 const deleted = lineDeco("bm-line bm-deleted");
+const unimportant = lineDeco("bm-line bm-unimportant");
 const current = lineDeco("bm-current");
 const inlineMark = Decoration.mark({ class: "bm-inline" });
 
@@ -44,7 +45,7 @@ export function buildDecorations(doc: Text, diff: TextDiff, side: Side, lineHeig
     const mine = chunk[side];
     for (let n = mine.start; n < mine.end; n++) {
       const from = doc.line(n + 1).from;
-      out.push((paired.has(n) ? changed : lonely).range(from));
+      out.push((chunk.unimportant ? unimportant : paired.has(n) ? changed : lonely).range(from));
       if (index === currentChunk) out.push(current.range(from));
     }
     const deficit = chunk[other].end - chunk[other].start - (mine.end - mine.start);

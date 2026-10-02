@@ -51,6 +51,12 @@ pub struct DiffOptions {
     pub ignore_line_endings: bool,
     pub algorithm: Algorithm,
     pub inline: InlineMode,
+    /// Regular expressions for text that doesn't matter, such as comments. Matches are removed
+    /// from each line before comparing, and a change whose lines are all blank afterwards is
+    /// marked unimportant.
+    pub ignore: Vec<String>,
+    /// Also mark changes that only add or remove blank lines as unimportant.
+    pub ignore_blank_lines: bool,
 }
 
 impl Default for DiffOptions {
@@ -61,6 +67,8 @@ impl Default for DiffOptions {
             ignore_line_endings: true,
             algorithm: Algorithm::Histogram,
             inline: InlineMode::Word,
+            ignore: Vec::new(),
+            ignore_blank_lines: false,
         }
     }
 }
