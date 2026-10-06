@@ -13,7 +13,7 @@ import {
   stepUndecided,
   type Decision,
   type MergeNode,
-} from "./folderMerge";
+} from "./folderMergeModel";
 import { signature, type FolderEntry } from "./folderTree";
 
 const file = (name: string, size: number, modified = 1000): FolderEntry => ({ name, kind: "file", size, modified, children: [] });

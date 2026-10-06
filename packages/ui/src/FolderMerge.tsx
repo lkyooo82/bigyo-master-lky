@@ -30,7 +30,7 @@ import {
   type MergeStatus,
   type MergeVerdicts,
   type Output,
-} from "./folderMerge";
+} from "./folderMergeModel";
 import { parseExclude, type Criteria, type FolderEntry, type FolderHost, type FolderRef, type Verdict } from "./folderTree";
 import { buildResult } from "./mergeModel";
 import { MergeView, type MergeFiles } from "./MergeView";
