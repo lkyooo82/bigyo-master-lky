@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import type { Side } from "./decorations";
 import type { OpenedFile } from "./files";
-import { ActionDialog } from "./FolderActions";
+import { ActionDialog, label, summarize } from "./FolderActions";
 import { applyGitignore } from "./gitignore";
 import {
   allRows,
@@ -33,15 +33,22 @@ import {
 const ROW_HEIGHT = 22;
 const OVERSCAN = 10;
 /** Files compared at once; each comparison reads both files. */
-const CONCURRENCY = 16;
-const DEFAULT_EXCLUDE = ".git, node_modules";
+export const CONCURRENCY = 16;
+export const DEFAULT_EXCLUDE = ".git, node_modules";
 const GITIGNORE_KEY = "bigyo.folderGitignore";
 
-const loadGitignore = () => {
+export const loadGitignore = () => {
   try {
     return localStorage.getItem(GITIGNORE_KEY) === "1";
   } catch {
     return false;
+  }
+};
+export const saveGitignore = (on: boolean) => {
+  try {
+    localStorage.setItem(GITIGNORE_KEY, on ? "1" : "0");
+  } catch {
+    // Not remembering the choice is fine.
   }
 };
 const SIDES = ["left", "right"] as const;
@@ -63,9 +70,9 @@ const STATUS_MARK: Record<Status, { mark: string; title: string }> = {
   error: { mark: "!", title: "읽을 수 없음" },
 };
 
-const fmt = (n: number) => n.toLocaleString("ko-KR");
+export const fmt = (n: number) => n.toLocaleString("ko-KR");
 const pad = (n: number) => String(n).padStart(2, "0");
-const fmtTime = (ms: number | null | undefined) => {
+export const fmtTime = (ms: number | null | undefined) => {
   if (ms == null) return "";
   const d = new Date(ms);
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -137,6 +144,8 @@ export function FolderCompare({ host, onOpenFiles, modeSwitch, initialFolders, a
     }
     return { actions: dialog.sides.map((side) => ({ op: "remove", side, path: node.path, kind: node.kind })), skipped: [] };
   }, [dialog, tree]);
+
+  const lines = useMemo(() => plan.actions.map(label), [plan]);
 
   /** The sides the plan changes that can't be changed, as a message. */
   const blocked = (() => {
@@ -372,11 +381,7 @@ export function FolderCompare({ host, onOpenFiles, modeSwitch, initialFolders, a
               checked={gitignore}
               onChange={(e) => {
                 setGitignore(e.target.checked);
-                try {
-                  localStorage.setItem(GITIGNORE_KEY, e.target.checked ? "1" : "0");
-                } catch {
-                  // Not remembering the choice is fine.
-                }
+                saveGitignore(e.target.checked);
               }}
             />
             .gitignore 따르기
@@ -444,7 +449,8 @@ export function FolderCompare({ host, onOpenFiles, modeSwitch, initialFolders, a
       {dialog && (
         <ActionDialog
           title={dialog.kind === "sync" ? "폴더 동기화" : dialog.kind === "copy" ? "복사" : "삭제"}
-          actions={plan.actions}
+          lines={lines}
+          summary={summarize(lines, !!host.removesToTrash)}
           skipped={plan.skipped}
           trash={!!host.removesToTrash}
           blocked={blocked}
@@ -487,7 +493,7 @@ export function FolderCompare({ host, onOpenFiles, modeSwitch, initialFolders, a
   );
 }
 
-function useScan(
+export function useScan(
   host: FolderHost,
   folder: FolderRef | null,
   exclude: string[],

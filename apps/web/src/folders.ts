@@ -242,5 +242,13 @@ export const browserFolders: FolderHost = {
     await dir.removeEntry(parts[parts.length - 1], { recursive: true });
   },
 
+  async writeText(folder, path, text) {
+    const parts = path.split("/");
+    const dir = await dirAt(await writable(folder), parts.slice(0, -1), true);
+    const out = await (await dir.getFileHandle(parts[parts.length - 1], { create: true })).createWritable();
+    await out.write(new Blob([text]));
+    await out.close();
+  },
+
   removesToTrash: false,
 };

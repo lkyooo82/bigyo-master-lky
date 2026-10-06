@@ -40,6 +40,8 @@ export interface FolderHost {
   copy?(from: FolderRef, to: FolderRef, path: string): Promise<void>;
   /** Deletes the file or folder at `path`. */
   remove?(folder: FolderRef, path: string): Promise<void>;
+  /** Writes a text file at `path` (UTF-8), creating parent folders and replacing a file there. */
+  writeText?(folder: FolderRef, path: string, text: string): Promise<void>;
   /** True when `remove` moves to the system trash; otherwise deletion can't be undone. */
   removesToTrash?: boolean;
 }
