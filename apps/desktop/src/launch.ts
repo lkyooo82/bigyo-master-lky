@@ -14,7 +14,8 @@ const baseName = (path: string) => path.split(/[\\/]/).pop() ?? path;
 /**
  * Paths given on the command line, as Git tools such as SourceTree pass them:
  * - `bigyo-master left right`: compare two files or two folders (external diff tool);
- * - `bigyo-master left right base [merged]`: three-way merge, saving to `merged` (merge tool).
+ * - `bigyo-master left right base [merged]`: three-way merge, saving to `merged` (merge tool);
+ *   with folders, a folder merge into `merged` (or into `left` when it is left out).
  * Anything else opens the app as usual.
  */
 export async function readLaunch(): Promise<Launch | undefined> {
@@ -26,7 +27,12 @@ export async function readLaunch(): Promise<Launch | undefined> {
       p.exists ? { name: baseName(p.path), bytes: await readFile(p.path), handle: p.path } : { name: "(없음)", bytes: new Uint8Array() };
     if (paths.length === 3 || paths.length === 4) {
       const [left, right, base, merged] = paths;
-      if ([left, right, base].some((p) => p.isDir)) throw new Error("병합은 파일끼리만 할 수 있습니다.");
+      const folder = (p: LaunchPath) => ({ name: p.path, handle: p.path });
+      if ([left, right, base].every((p) => p.isDir)) {
+        if (merged?.exists && !merged.isDir) throw new Error(`폴더 병합 결과는 폴더여야 합니다: ${merged.path}`);
+        return { mode: "folderMerge", folders: { left: folder(left), base: folder(base), right: folder(right), output: merged ? folder(merged) : undefined } };
+      }
+      if ([left, right, base].some((p) => p.isDir)) throw new Error("병합은 파일끼리, 또는 폴더끼리만 할 수 있습니다.");
       return {
         mode: "merge",
         files: {

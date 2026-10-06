@@ -26,6 +26,8 @@ export interface MergeViewProps {
   active?: boolean;
   /** Offered after saving when a Git tool opened the merge: closing hands the result back. */
   onDone?: () => void;
+  /** Tooltip of the close button. */
+  doneHint?: string;
 }
 
 interface Input {
@@ -99,7 +101,7 @@ function resultDecorations(doc: Text, blocks: ConflictBlock[], changed: { start:
 
 const baseExtensions = () => [lineNumbers(), highlightActiveLineGutter(), highlightActiveLine(), drawSelection(), search({ top: true }), highlightSelectionMatches(), diffDecorations];
 
-export function MergeView({ engine, files, initial, modeSwitch, active = true, onDone }: MergeViewProps) {
+export function MergeView({ engine, files, initial, modeSwitch, active = true, onDone, doneHint = "창을 닫고 Git 도구로 돌아갑니다" }: MergeViewProps) {
   const hosts = { left: useRef<HTMLDivElement>(null), base: useRef<HTMLDivElement>(null), right: useRef<HTMLDivElement>(null), result: useRef<HTMLDivElement>(null) };
   const views = useRef<Record<Pane | "result", EditorView> | null>(null);
   const [inputs, setInputs] = useState<Record<Pane, Input> | null>(null);
@@ -376,7 +378,7 @@ export function MergeView({ engine, files, initial, modeSwitch, active = true, o
           )}
           <button onClick={() => void save()} title="저장 (Ctrl+S)">저장</button>
           {onDone && (
-            <button onClick={onDone} className={saved ? "bm-primary" : undefined} title="창을 닫고 Git 도구로 돌아갑니다">
+            <button onClick={onDone} className={saved ? "bm-primary" : undefined} title={doneHint}>
               {saved ? "닫기 (저장됨)" : "저장하지 않고 닫기"}
             </button>
           )}

@@ -97,6 +97,15 @@ async fn copy_entry(src: PathBuf, dst: PathBuf) -> Result<u64, String> {
         .map_err(|e| e.to_string())
 }
 
+/// Writes a text file, creating its parent folders; used for files a folder merge combines.
+#[tauri::command]
+async fn write_text(path: PathBuf, text: String) -> Result<(), String> {
+    spawn_blocking(move || diff_core::folder::write_file(&path, text.as_bytes()))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
+}
+
 /// Moves a file or folder to the system trash, so a deletion can be undone there.
 #[tauri::command]
 async fn trash_entry(path: PathBuf) -> Result<(), String> {
@@ -119,7 +128,8 @@ pub fn run() {
             launch_paths,
             merge3,
             copy_entry,
-            trash_entry
+            trash_entry,
+            write_text
         ])
         .run(tauri::generate_context!())
         .expect("error while running Bigyo Master");

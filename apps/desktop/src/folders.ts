@@ -42,5 +42,9 @@ export const desktopFolders: FolderHost = {
     return invoke<void>("trash_entry", { path: joinPath(rootOf(folder.handle), path) });
   },
 
+  async writeText(folder, path, text) {
+    await invoke<void>("write_text", { path: joinPath(rootOf(folder.handle), path), text });
+  },
+
   removesToTrash: true,
 };

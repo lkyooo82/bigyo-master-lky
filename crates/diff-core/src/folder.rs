@@ -130,6 +130,15 @@ fn copy_inner(src: &Path, dst: &Path, meta: &fs::Metadata) -> io::Result<u64> {
     Ok(1)
 }
 
+/// Writes `contents` to the file at `path`, creating missing parent folders and replacing a
+/// file already there.
+pub fn write_file(path: &Path, contents: &[u8]) -> io::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(path, contents)
+}
+
 /// Fills `buf` unless the file ends first; returns the byte count.
 fn read_full(file: &mut File, buf: &mut [u8]) -> io::Result<usize> {
     let mut filled = 0;
@@ -188,6 +197,15 @@ mod tests {
         assert!(glob_match("*", "anything"));
         assert!(glob_match("*a*b", "xxaxxb"));
         assert!(!glob_match("*a*b", "xxbxxa"));
+    }
+
+    #[test]
+    fn writes_into_new_folders() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a/b/c.txt");
+        write_file(&path, b"one").unwrap();
+        write_file(&path, b"two").unwrap();
+        assert_eq!(fs::read(&path).unwrap(), b"two");
     }
 
     #[test]
